@@ -41,7 +41,11 @@ def mjpeg_stream(username):
 
 # ================= DATABASE INIT =================
 def get_db_path():
-    return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'users.db')
+    # Use /tmp for cloud (Render), current dir for local
+    if os.environ.get('RENDER_INSTANCE_ID'):  # Render sets this
+        return os.path.join('/tmp', 'users.db')
+    else:
+        return 'users.db'
 
 def init_db():
     db_path = get_db_path()
