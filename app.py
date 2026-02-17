@@ -40,8 +40,12 @@ def mjpeg_stream(username):
     return Response(gen_mjpeg(username), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 # ================= DATABASE INIT =================
+def get_db_path():
+    return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'users.db')
+
 def init_db():
-    conn = sqlite3.connect("users.db")
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     # Camera events table for timestamped logs
     cur.execute("""
@@ -270,7 +274,7 @@ def register():
         username = generate_username(name)
         password = generate_password()
 
-        conn = sqlite3.connect("users.db")
+        conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO users(name,email,username,password) VALUES(?,?,?,?)",
@@ -335,7 +339,7 @@ def login_check():
     u = request.form["username"]
     p = request.form["password"]
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute(
         "SELECT * FROM users WHERE username=? AND password=?",
@@ -362,7 +366,7 @@ def student_dashboard():
     if "username" not in session:
         return redirect(url_for("student_login"))
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
 
     cur.execute("SELECT name,email,username FROM users WHERE username=?", (session["username"],))
@@ -383,7 +387,7 @@ def view_results():
 
     username = session["username"]
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("""
         SELECT subject, score, date
@@ -408,7 +412,7 @@ def start_exam():
     # Log all faces detected at the start of the exam
     log_faces_during_exam(session_id=session["username"])
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
 
     # Get subject name
@@ -478,7 +482,7 @@ def monitor_exam():
             session['last_camera_hidden_ts'] = now
             # Log event in camera_events table
             try:
-                conn = sqlite3.connect("users.db")
+                conn = sqlite3.connect(get_db_path())
                 cur = conn.cursor()
                 cur.execute("INSERT INTO camera_events (username, event_type, event_time, exam_subject) VALUES (?, ?, datetime('now'), ?)",
                     (session.get('username', 'unknown'), 'camera_hidden', session.get('current_subject', 'unknown')))
@@ -607,7 +611,7 @@ def submit_exam():
     if terminated:
         score = 0  # Or handle differently
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
 
     for qid in request.form:
@@ -649,7 +653,7 @@ def admin_login():
 def admin_dashboard():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("SELECT id, name, enabled FROM subjects")
     subjects = cur.fetchall()
@@ -686,7 +690,7 @@ def admin_dashboard():
 def toggle_subject(subject_id):
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("UPDATE subjects SET enabled = NOT enabled WHERE id = ?", (subject_id,))
     conn.commit()
@@ -699,7 +703,7 @@ def delete_subject():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     subject_id = request.form["subject_id"]
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("DELETE FROM subjects WHERE id=?", (subject_id,))
     cur.execute("DELETE FROM questions WHERE subject_id=?", (subject_id,))  # Also delete related questions
@@ -713,7 +717,7 @@ def delete_question():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     question_id = request.form["question_id"]
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("DELETE FROM questions WHERE id=?", (question_id,))
     conn.commit()
@@ -741,7 +745,7 @@ def add_subjects():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
 
     if request.method == "POST":
@@ -760,7 +764,7 @@ def add_questions():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("SELECT * FROM subjects")
     subjects = cur.fetchall()
@@ -791,7 +795,7 @@ def admin_results():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
 
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("""
         SELECT username, subject, score, date, id, cheating_count, terminated, looking_away_count, tab_switch_count, camera_hidden_count, hand_cover_count, no_blink_count
@@ -808,7 +812,7 @@ def delete_result():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     result_id = request.form["result_id"]
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("DELETE FROM results WHERE id=?", (result_id,))
     conn.commit()
@@ -825,7 +829,7 @@ def admin_logout():
 def admin_camera_events():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("SELECT username, event_type, event_time, exam_subject FROM camera_events ORDER BY event_time DESC LIMIT 200")
     events = cur.fetchall()
@@ -852,7 +856,7 @@ def manage_materials():
             file.save(file_path)
             
             # Save to database
-            conn = sqlite3.connect("users.db")
+            conn = sqlite3.connect(get_db_path())
             cur = conn.cursor()
             cur.execute("INSERT INTO materials (title, description, filename, filepath, upload_date) VALUES (?, ?, ?, ?, ?)", 
                        (title, description, filename, f"static/materials/{filename}", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
@@ -862,7 +866,7 @@ def manage_materials():
         return redirect(url_for("manage_materials"))
     
     # GET request - show all materials
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("SELECT id, title, description, filename, filepath, upload_date, enabled FROM materials ORDER BY upload_date DESC")
     materials = cur.fetchall()
@@ -877,7 +881,7 @@ def delete_material():
         return redirect(url_for("admin_login"))
     
     material_id = request.form["material_id"]
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     
     # Get filename before deleting
@@ -904,7 +908,7 @@ def toggle_material():
         return redirect(url_for("admin_login"))
     
     material_id = request.form["material_id"]
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     
     # Get current enabled status and toggle it
@@ -925,7 +929,7 @@ def materials():
     if not session.get("username"):
         return redirect(url_for("login"))
     
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect(get_db_path())
     cur = conn.cursor()
     cur.execute("SELECT id, title, description, filename, filepath, upload_date FROM materials WHERE enabled = 1 ORDER BY upload_date DESC")
     materials = cur.fetchall()
