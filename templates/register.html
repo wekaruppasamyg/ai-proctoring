@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register | AI Proctor</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Poppins',sans-serif;
+}
+
+body{
+    min-height:100vh;
+    background:#7b97ad;
+    color:#ffffff;
+}
+
+/* ===== HEADER ===== */
+header{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    z-index:10;
+    padding:18px 40px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    animation: fadeInDown 1s ease; /* Advanced UI: Fade in from top */
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.logo{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.logo img{
+    width:34px;
+}
+
+.logo span{
+    font-size:18px;
+    font-weight:500;
+}
+
+/* ===== MAIN LAYOUT ===== */
+.main{
+    min-height:100vh;
+    display:grid;
+    grid-template-columns: 1.1fr 1fr;
+    align-items:center;
+    padding-top:80px;
+}
+
+/* ===== LEFT IMAGE ===== */
+.left{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:40px;
+}
+
+.left img{
+    width:100%;
+    max-width:520px;
+    position: relative; /* For overlay positioning */
+    transition: transform 0.3s ease; /* Advanced UI: Slight scale on hover */
+}
+
+.left img::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: black;
+    opacity: 0;
+    transition: opacity 0.3s ease; /* Smooth black overlay on hover */
+}
+
+.left img:hover::before {
+    opacity: 1; /* Black overlay appears on hover */
+}
+
+.left img:hover {
+    transform: scale(1.05); /* Advanced UI: Slight zoom effect */
+}
+
+/* ===== RIGHT CONTENT ===== */
+.right{
+    padding:60px;
+    animation: fadeInUp 1s ease 0.5s both; /* Advanced UI: Fade in from bottom with delay */
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.right h1{
+    font-size:48px;
+    font-weight:500;
+    margin-bottom:12px;
+}
+
+.right h1 span{
+    opacity:0.6;
+}
+
+.right p{
+    font-size:16px;
+    opacity:0.8;
+    margin-bottom:40px;
+}
+
+/* ===== FORM ===== */
+.form-box{
+    background:#ffffff;
+    color:#000;
+    padding:40px;
+    max-width:420px;
+    animation: fadeIn 1s ease 1s both; /* Advanced UI: Fade in with delay */
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.form-box h2{
+    font-size:22px;
+    font-weight:500;
+    margin-bottom:25px;
+}
+
+input{
+    width:100%;
+    padding:14px 16px;
+    margin-bottom:18px;
+    border:1px solid #ccc;
+    font-size:15px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease; /* Advanced UI: Smooth focus transition */
+}
+
+input:focus{
+    outline:none;
+    border-color:#000;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2); /* Advanced UI: Subtle shadow on focus */
+}
+
+button{
+    width:100%;
+    padding:14px;
+    border:none;
+    background:#000;
+    color:#fff;
+    font-size:15px;
+    cursor:pointer;
+    transition: opacity 0.3s ease, transform 0.2s ease; /* Advanced UI: Smooth hover effects */
+}
+
+button:hover{
+    opacity:0.85;
+    transform: translateY(-2px); /* Advanced UI: Lift effect on hover */
+}
+
+.login-link{
+    margin-top:20px;
+    font-size:14px;
+}
+
+.login-link a{
+    color:#000;
+    text-decoration:underline;
+    transition: color 0.3s ease; /* Advanced UI: Smooth color transition */
+}
+
+.login-link a:hover{
+    color:#555; /* Advanced UI: Darker on hover */
+}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:900px){
+    .main{
+        grid-template-columns:1fr;
+    }
+    .left{
+        display:none;
+    }
+    .right{
+        padding:40px 20px;
+    }
+}
+
+@media(max-width:600px){
+    header{
+        padding:15px 20px;
+    }
+    .logo span{
+        font-size:16px;
+    }
+    .right h1{
+        font-size:36px;
+    }
+    .right p{
+        font-size:14px;
+        margin-bottom:30px;
+    }
+    .form-box{
+        padding:30px;
+    }
+    .form-box h2{
+        font-size:20px;
+        margin-bottom:20px;
+    }
+    input{
+        padding:12px 14px;
+        margin-bottom:15px;
+        font-size:14px;
+    }
+    button{
+        padding:12px;
+        font-size:14px;
+    }
+    .login-link{
+        font-size:13px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ===== HEADER ===== -->
+<header>
+    <div class="logo">
+        <img src="/static/home.jpg" alt="Logo">
+        <span>AI Proctor</span>
+    </div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<div class="main">
+
+    <!-- LEFT IMAGE -->
+    <div class="left">
+        <img src="/static/regi.jpg" alt="Register Visual">
+    </div>
+
+    <!-- RIGHT CONTENT -->
+    <div class="right">
+        <h1>
+            Make it <span>secure.</span>
+        </h1>
+        <p>Create your account to access the AI Exam Proctoring System.</p>
+
+        <div class="form-box">
+            <h2>Create Account</h2>
+
+            <!-- 🔒 BACKEND UNCHANGED -->
+            <form action="/register" method="post">
+                <input name="name" placeholder="Full Name" required>
+                <input name="email" placeholder="Email Address" required>
+                <button type="submit">Create Account</button>
+            </form>
+
+            <div class="login-link">
+                Already have an account?
+                <a href="/student-login">Log in</a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

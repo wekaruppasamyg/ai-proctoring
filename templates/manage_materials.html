@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Materials - AI Proctoring</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --sidebar: #1e293b;
+            --card: #1e293b;
+            --primary: #8b5cf6;
+            --secondary: #7c3aed;
+            --accent: #a855f7;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --text: #e5e7eb;
+            --text-light: #9ca3af;
+            --text-muted: #6b7280;
+            --white: #ffffff;
+            --border: rgba(255, 255, 255, 0.1);
+            --border-light: rgba(255, 255, 255, 0.05);
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.4);
+            --gradient: linear-gradient(135deg, var(--primary), var(--secondary));
+            --gradient-hover: linear-gradient(135deg, var(--secondary), var(--accent));
+            --radius: 12px;
+            --radius-lg: 16px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            min-height: 100vh;
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Advanced Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -200px 0;
+            }
+            100% {
+                background-position: calc(200px + 100%) 0;
+            }
+        }
+
+        .animate-fade-in-up {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .animate-slide-in-right {
+            animation: slideInRight 0.6s ease-out;
+        }
+
+        .animate-pulse {
+            animation: pulse 2s infinite;
+        }
+
+        /* Loading States */
+        .loading-shimmer {
+            background: linear-gradient(90deg, var(--card) 25%, rgba(255, 255, 255, 0.1) 50%, var(--card) 75%);
+            background-size: 200px 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        /* Main Layout */
+        .main-content {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        /* Header Section */
+        .header {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient);
+        }
+
+        .header h1 {
+            color: var(--white);
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: var(--text-light);
+            font-size: 1.1rem;
+            font-weight: 400;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            padding: 2.5rem;
+            border-radius: var(--radius-lg);
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            transform: translate(50%, -50%);
+        }
+
+        .upload-section h2 {
+            color: var(--white);
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .upload-section h2 i {
+            color: var(--primary);
+        }
+
+        .upload-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .form-group label {
+            color: var(--white);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-group label i {
+            color: var(--primary);
+            font-size: 0.8rem;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            padding: 1rem 1.2rem;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 1rem;
+            transition: var(--transition);
+            background: var(--bg);
+            color: var(--text);
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .form-group input:hover,
+        .form-group textarea:hover {
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 120px;
+            line-height: 1.6;
+        }
+
+        .form-group input[type="file"] {
+            padding: 0.8rem;
+            cursor: pointer;
+        }
+
+        .form-group input[type="file"]::file-selector-button {
+            background: var(--gradient);
+            color: var(--white);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            margin-right: 1rem;
+        }
+
+        .form-group input[type="file"]::file-selector-button:hover {
+            background: var(--gradient-hover);
+            transform: translateY(-1px);
+        }
+
+        .upload-btn {
+            background: var(--gradient);
+            color: var(--white);
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: var(--radius);
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            grid-column: span 2;
+            justify-self: start;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .upload-btn:hover::before {
+            left: 100%;
+        }
+
+        .upload-btn:hover {
+            background: var(--gradient-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+        }
+
+        .upload-btn:active {
+            transform: translateY(0);
+        }
+
+        .upload-btn i {
+            font-size: 1.1rem;
+        }
+
+        /* Materials List */
+        .materials-list {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+
+        .materials-header {
+            background: var(--gradient);
+            color: var(--white);
+            padding: 1.5rem 2rem;
+            font-size: 1.3rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .materials-header i {
+            font-size: 1.2rem;
+        }
+
+        .materials-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .material-item {
+            display: flex;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-light);
+            transition: var(--transition);
+            position: relative;
+        }
+
+        .material-item:hover {
+            background: rgba(139, 92, 246, 0.05);
+            transform: translateX(4px);
+        }
+
+        .material-item:last-child {
+            border-bottom: none;
+        }
+
+        .material-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--gradient);
+            transform: scaleY(0);
+            transition: var(--transition);
+        }
+
+        .material-item:hover::before {
+            transform: scaleY(1);
+        }
+
+        .material-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .material-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--white);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .material-status {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            gap: 0.3rem;
+        }
+
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .material-description {
+            color: var(--text-light);
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+        }
+
+        .material-meta {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .meta-item i {
+            font-size: 0.8rem;
+            color: var(--primary);
+        }
+
+        .material-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-view {
+            background: rgba(40, 167, 69, 0.2);
+            color: var(--success);
+            border: 1px solid rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-view:hover {
+            background: var(--success);
+            color: var(--white);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-toggle {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-toggle:hover {
+            background: var(--warning);
+            color: #000;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-delete {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-delete:hover {
+            background: var(--error);
+            color: var(--white);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
+        }
+
+        .no-materials {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-light);
+        }
+
+        .no-materials i {
+            font-size: 4rem;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+            opacity: 0.6;
+            animation: pulse 3s infinite;
+        }
+
+        .no-materials h3 {
+            color: var(--white);
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .no-materials p {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Advanced Responsive Design */
+        /* Extra Large Screens (1440px+) */
+        @media (min-width: 1440px) {
+            .main-content {
+                padding: 3rem;
+            }
+
+            .header h1 {
+                font-size: 3rem;
+            }
+
+            .upload-form {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+
+            .upload-btn {
+                grid-column: span 1;
+            }
+
+            .form-group:nth-child(3) {
+                grid-column: span 3;
+            }
+        }
+
+        /* Large Screens (1024px - 1439px) */
+        @media (max-width: 1439px) and (min-width: 1024px) {
+            .main-content {
+                padding: 2.5rem;
+            }
+
+            .header h1 {
+                font-size: 2.8rem;
+            }
+
+            .upload-section {
+                padding: 2rem;
+            }
+
+            .materials-header {
+                padding: 1.3rem 1.8rem;
+            }
+
+            .material-item {
+                padding: 1.3rem 1.8rem;
+            }
+        }
+
+        /* Medium Screens (768px - 1023px) */
+        @media (max-width: 1023px) and (min-width: 768px) {
+            .main-content {
+                padding: 2rem 1.5rem;
+            }
+
+            .header {
+                padding: 1.8rem;
+            }
+
+            .header h1 {
+                font-size: 2.2rem;
+            }
+
+            .upload-section {
+                padding: 2rem 1.5rem;
+            }
+
+            .upload-form {
+                grid-template-columns: 1fr;
+                gap: 1.2rem;
+            }
+
+            .upload-btn {
+                grid-column: span 1;
+                width: 100%;
+                justify-content: center;
+            }
+
+            .form-group:nth-child(3) {
+                grid-column: span 1;
+            }
+
+            .materials-header {
+                padding: 1.2rem 1.5rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .materials-stats {
+                font-size: 0.8rem;
+            }
+
+            .material-item {
+                padding: 1.2rem 1.5rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .material-actions {
+                align-self: flex-end;
+                flex-wrap: wrap;
+            }
+
+            .btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.85rem;
+            }
+        }
+
+        /* Small Screens (480px - 767px) */
+        @media (max-width: 767px) and (min-width: 480px) {
+            .main-content {
+                padding: 1rem;
+            }
+
+            .header {
+                padding: 1.5rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .header p {
+                font-size: 1rem;
+            }
+
+            .upload-section {
+                padding: 1.5rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .upload-section h2 {
+                font-size: 1.5rem;
+            }
+
+            .upload-form {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .form-group input,
+            .form-group textarea {
+                padding: 0.8rem 1rem;
+                font-size: 0.95rem;
+            }
+
+            .upload-btn {
+                padding: 0.9rem 1.5rem;
+                font-size: 1rem;
+            }
+
+            .materials-header {
+                padding: 1rem;
+                font-size: 1.1rem;
+            }
+
+            .material-item {
+                padding: 1rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.8rem;
+            }
+
+            .material-title {
+                font-size: 1rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.3rem;
+            }
+
+            .material-status {
+                align-self: flex-start;
+            }
+
+            .material-meta {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.3rem;
+            }
+
+            .material-actions {
+                width: 100%;
+                justify-content: center;
+                gap: 0.3rem;
+            }
+
+            .btn {
+                flex: 1;
+                justify-content: center;
+                padding: 0.6rem 0.8rem;
+                font-size: 0.8rem;
+            }
+
+            .no-materials {
+                padding: 3rem 1rem;
+            }
+
+            .no-materials i {
+                font-size: 3rem;
+            }
+        }
+
+        /* Extra Small Screens (320px - 479px) */
+        @media (max-width: 479px) {
+            .main-content {
+                padding: 0.5rem;
+            }
+
+            .header {
+                padding: 1rem;
+                margin-bottom: 1rem;
+                border-radius: var(--radius);
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .header p {
+                font-size: 0.9rem;
+            }
+
+            .upload-section {
+                padding: 1rem;
+                margin-bottom: 1rem;
+                border-radius: var(--radius);
+            }
+
+            .upload-section h2 {
+                font-size: 1.3rem;
+            }
+
+            .upload-form {
+                gap: 0.8rem;
+            }
+
+            .form-group label {
+                font-size: 0.9rem;
+            }
+
+            .form-group input,
+            .form-group textarea {
+                padding: 0.7rem 0.8rem;
+                font-size: 0.9rem;
+            }
+
+            .upload-btn {
+                padding: 0.8rem 1.2rem;
+                font-size: 0.95rem;
+            }
+
+            .materials-list {
+                border-radius: var(--radius);
+            }
+
+            .materials-header {
+                padding: 0.8rem 1rem;
+                font-size: 1rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.3rem;
+            }
+
+            .materials-stats {
+                font-size: 0.75rem;
+            }
+
+            .material-item {
+                padding: 0.8rem 1rem;
+                gap: 0.6rem;
+            }
+
+            .material-title {
+                font-size: 0.95rem;
+            }
+
+            .material-description {
+                font-size: 0.9rem;
+            }
+
+            .material-meta {
+                font-size: 0.8rem;
+                gap: 0.5rem;
+            }
+
+            .material-actions {
+                gap: 0.2rem;
+            }
+
+            .btn {
+                padding: 0.5rem 0.6rem;
+                font-size: 0.75rem;
+                gap: 0.2rem;
+            }
+
+            .btn i {
+                font-size: 0.8rem;
+            }
+
+            .no-materials {
+                padding: 2rem 0.5rem;
+            }
+
+            .no-materials i {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+            }
+
+            .no-materials h3 {
+                font-size: 1.2rem;
+            }
+
+            .no-materials p {
+                font-size: 0.95rem;
+            }
+        }
+
+        /* Touch Device Optimizations */
+        @media (hover: none) and (pointer: coarse) {
+            .material-item:hover {
+                transform: none;
+            }
+
+            .material-item:hover::before {
+                transform: none;
+            }
+
+            .btn:hover {
+                transform: none;
+            }
+
+            .upload-btn:hover {
+                transform: none;
+            }
+
+            .form-group input:focus,
+            .form-group textarea:focus {
+                transform: none;
+            }
+        }
+
+        /* High Contrast Mode Support */
+        @media (prefers-contrast: high) {
+            :root {
+                --border: rgba(255, 255, 255, 0.3);
+                --text-light: #d1d5db;
+            }
+        }
+
+        /* Reduced Motion Support */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Drag and drop styles */
+        .upload-section.drag-over {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+            transform: scale(1.01);
+        }
+
+        /* Search functionality */
+        .search-container {
+            margin-top: 1rem;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.8rem 1rem 0.8rem 2.5rem;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+        }
+
+        .search-container i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-light);
+            z-index: 1;
+        }
+
+        /* Form validation styles */
+        .field-error {
+            color: var(--error);
+            font-size: 0.8rem;
+            margin-top: 0.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .field-error::before {
+            content: '⚠';
+        }
+
+        .form-group input.error,
+        .form-group textarea.error {
+            border-color: var(--error);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+        }
+
+        .form-group input.success,
+        .form-group textarea.success {
+            border-color: var(--success);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+        }
+
+        /* Message notifications */
+        .message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--success);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            z-index: 10000;
+            animation: slideInRight 0.3s ease-out;
+            max-width: 400px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .message.error {
+            background: var(--error);
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <div class="header">
+            <h1>Manage Materials</h1>
+            <p>Upload and manage study materials for students</p>
+        </div>
+
+        <div class="upload-section">
+            <h2>Upload New Material</h2>
+            <form method="POST" enctype="multipart/form-data" class="upload-form">
+                <div class="form-group">
+                    <label for="title">Material Title</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="file">File</label>
+                    <input type="file" id="file" name="file" required>
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label for="description">Description (Optional)</label>
+                    <textarea id="description" name="description" placeholder="Brief description of the material..."></textarea>
+                </div>
+                <button type="submit" class="upload-btn">
+                    <i class="fas fa-upload"></i> Upload Material
+                </button>
+            </form>
+        </div>
+
+        <div class="materials-list">
+            <div class="materials-header">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-list"></i> Uploaded Materials
+                </div>
+                {% if materials %}
+                <div class="materials-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-file-alt"></i> {{ materials|length }} Total
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-eye"></i> {{ materials|selectattr('6', 'equalto', 1)|list|length }} Enabled
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-eye-slash"></i> {{ materials|selectattr('6', 'equalto', 0)|list|length }} Disabled
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% if materials %}
+                {% for material in materials %}
+                <div class="material-item">
+                    <div class="material-info">
+                        <div class="material-title">
+                            {{ material[1] }}
+                            <span class="material-status {{ 'status-enabled' if material[6] else 'status-disabled' }}">
+                                {{ 'Enabled' if material[6] else 'Disabled' }}
+                            </span>
+                        </div>
+                        {% if material[2] %}
+                        <div class="material-description">{{ material[2] }}</div>
+                        {% endif %}
+                        <div class="material-meta">
+                            <div class="meta-item">
+                                <i class="fas fa-calendar-alt"></i> {{ material[5] }}
+                            </div>
+                            <div class="meta-item">
+                                <i class="fas fa-file"></i> {{ material[3] }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="material-actions">
+                        <a href="{{ url_for('static', filename='materials/' + material[3]) }}" target="_blank" class="btn btn-view">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                        <form method="POST" action="{{ url_for('toggle_material') }}" style="display: inline;">
+                            <input type="hidden" name="material_id" value="{{ material[0] }}">
+                            <button type="submit" class="btn btn-toggle">
+                                <i class="fas fa-{{ 'eye-slash' if material[6] else 'eye' }}"></i> {{ 'Disable' if material[6] else 'Enable' }}
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('delete_material') }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this material?')">
+                            <input type="hidden" name="material_id" value="{{ material[0] }}">
+                            <button type="submit" class="btn btn-delete">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-materials">
+                    <i class="fas fa-book-open"></i>
+                    <h3>No Materials Yet</h3>
+                    <p>Start by uploading your first study material to help students prepare for their exams.</p>
+                    <div style="margin-top: 1.5rem;">
+                        <i class="fas fa-arrow-up" style="color: var(--primary); font-size: 1.5rem; animation: pulse 2s infinite;"></i>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Advanced UI Enhancements
+        document.addEventListener('DOMContentLoaded', function() {
+            // Form validation and enhancement
+            const form = document.querySelector('.upload-form');
+            const inputs = form.querySelectorAll('input, textarea');
+            const uploadBtn = document.querySelector('.upload-btn');
+
+            // Real-time validation feedback
+            inputs.forEach(input => {
+                input.addEventListener('blur', function() {
+                    validateField(this);
+                });
+
+                input.addEventListener('input', function() {
+                    if (this.classList.contains('error')) {
+                        validateField(this);
+                    }
+                });
+            });
+
+            function validateField(field) {
+                const value = field.value.trim();
+                const isRequired = field.hasAttribute('required');
+                const isFile = field.type === 'file';
+
+                field.classList.remove('error', 'success');
+
+                if (isRequired && !value) {
+                    field.classList.add('error');
+                    showFieldError(field, 'This field is required');
+                } else if (isFile && field.files.length > 0) {
+                    const file = field.files[0];
+                    const maxSize = 50 * 1024 * 1024; // 50MB
+                    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'image/jpeg', 'image/png', 'image/gif'];
+
+                    if (file.size > maxSize) {
+                        field.classList.add('error');
+                        showFieldError(field, 'File size must be less than 50MB');
+                    } else if (!allowedTypes.includes(file.type)) {
+                        field.classList.add('error');
+                        showFieldError(field, 'File type not supported');
+                    } else {
+                        field.classList.add('success');
+                        hideFieldError(field);
+                    }
+                } else if (value) {
+                    field.classList.add('success');
+                    hideFieldError(field);
+                }
+            }
+
+            function showFieldError(field, message) {
+                hideFieldError(field);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'field-error';
+                errorDiv.textContent = message;
+                field.parentNode.appendChild(errorDiv);
+            }
+
+            function hideFieldError(field) {
+                const existingError = field.parentNode.querySelector('.field-error');
+                if (existingError) {
+                    existingError.remove();
+                }
+            }
+
+            // Upload button loading state
+            form.addEventListener('submit', function(e) {
+                const isValid = Array.from(inputs).every(input => {
+                    if (input.hasAttribute('required') && !input.value.trim()) {
+                        validateField(input);
+                        return false;
+                    }
+                    return !input.classList.contains('error');
+                });
+
+                if (!isValid) {
+                    e.preventDefault();
+                    return;
+                }
+
+                uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+                uploadBtn.disabled = true;
+                uploadBtn.style.opacity = '0.7';
+            });
+
+            // Material item animations
+            const materialItems = document.querySelectorAll('.material-item');
+            materialItems.forEach((item, index) => {
+                item.style.animationDelay = `${index * 0.1}s`;
+                item.classList.add('animate-fade-in-up');
+            });
+
+            // Enhanced button interactions
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('mousedown', function() {
+                    this.style.transform = 'scale(0.98)';
+                });
+
+                btn.addEventListener('mouseup', function() {
+                    this.style.transform = '';
+                });
+
+                btn.addEventListener('mouseleave', function() {
+                    this.style.transform = '';
+                });
+            });
+
+            // File input enhancement
+            const fileInput = document.querySelector('input[type="file"]');
+            const fileLabel = fileInput.nextElementSibling;
+
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    const fileName = this.files[0].name;
+                    const fileSize = (this.files[0].size / 1024 / 1024).toFixed(2);
+                    fileLabel.textContent = `${fileName} (${fileSize} MB)`;
+                    fileLabel.style.color = 'var(--success)';
+                } else {
+                    fileLabel.textContent = 'Choose a file or drag it here';
+                    fileLabel.style.color = '';
+                }
+            });
+
+            // Drag and drop for file input
+            const uploadSection = document.querySelector('.upload-section');
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadSection.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadSection.addEventListener(eventName, highlight, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadSection.addEventListener(eventName, unhighlight, false);
+            });
+
+            function highlight(e) {
+                uploadSection.classList.add('drag-over');
+            }
+
+            function unhighlight(e) {
+                uploadSection.classList.remove('drag-over');
+            }
+
+            uploadSection.addEventListener('drop', handleDrop, false);
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    fileInput.dispatchEvent(new Event('change'));
+                }
+            }
+
+            // Search and filter functionality (if needed in future)
+            const searchInput = document.createElement('input');
+            searchInput.type = 'text';
+            searchInput.placeholder = 'Search materials...';
+            searchInput.className = 'search-input';
+
+            // Add search input to header if there are materials
+            if (materialItems.length > 0) {
+                const header = document.querySelector('.header');
+                const searchContainer = document.createElement('div');
+                searchContainer.className = 'search-container';
+                searchContainer.innerHTML = `
+                    <div style="position: relative;">
+                        <i class="fas fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-light);"></i>
+                        <input type="text" placeholder="Search materials..." class="search-input" style="width: 100%; padding: 0.8rem 1rem 0.8rem 2.5rem; border: 2px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 1rem;">
+                    </div>
+                `;
+                header.appendChild(searchContainer);
+
+                const searchInput = searchContainer.querySelector('.search-input');
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = this.value.toLowerCase();
+                    materialItems.forEach(item => {
+                        const title = item.querySelector('.material-title').textContent.toLowerCase();
+                        const description = item.querySelector('.material-description')?.textContent.toLowerCase() || '';
+                        const isVisible = title.includes(searchTerm) || description.includes(searchTerm);
+                        item.style.display = isVisible ? 'flex' : 'none';
+                    });
+                });
+            }
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Ctrl/Cmd + / to focus search
+                if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+                    e.preventDefault();
+                    const searchInput = document.querySelector('.search-input');
+                    if (searchInput) {
+                        searchInput.focus();
+                    }
+                }
+            });
+
+            // Success/error message handling
+            function showMessage(message, type = 'success') {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}`;
+                messageDiv.innerHTML = `
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                    ${message}
+                `;
+                messageDiv.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: var(--${type === 'success' ? 'success' : 'error'});
+                    color: white;
+                    padding: 1rem 1.5rem;
+                    border-radius: var(--radius);
+                    box-shadow: var(--shadow);
+                    z-index: 10000;
+                    animation: slideInRight 0.3s ease-out;
+                    max-width: 400px;
+                `;
+
+                document.body.appendChild(messageDiv);
+
+                setTimeout(() => {
+                    messageDiv.style.animation = 'fadeOut 0.3s ease-out';
+                    setTimeout(() => messageDiv.remove(), 300);
+                }, 3000);
+            }
+
+            // Check for URL parameters to show messages
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('uploaded') === '1') {
+                showMessage('Material uploaded successfully!', 'success');
+            } else if (urlParams.get('error') === '1') {
+                showMessage('Error uploading material. Please try again.', 'error');
+            }
+        });
+
+        // Add CSS for additional elements
+        const additionalCSS = `
+            <style>
+                .field-error {
+                    color: var(--error);
+                    font-size: 0.8rem;
+                    margin-top: 0.3rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.3rem;
+                }
+
+                .field-error::before {
+                    content: '⚠';
+                }
+
+                .form-group input.error,
+                .form-group textarea.error {
+                    border-color: var(--error);
+                    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+                }
+
+                .form-group input.success,
+                .form-group textarea.success {
+                    border-color: var(--success);
+                    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+                }
+
+                .upload-section.drag-over {
+                    border-color: var(--primary);
+                    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+                }
+
+                .search-container {
+                    margin-top: 1rem;
+                }
+
+                .search-input:focus {
+                    outline: none;
+                    border-color: var(--primary);
+                    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+                }
+
+                .message {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+
+                @keyframes fadeOut {
+                    from { opacity: 1; transform: translateX(0); }
+                    to { opacity: 0; transform: translateX(100%); }
+                }
+
+                @media (max-width: 767px) {
+                    .search-container {
+                        margin-top: 0.5rem;
+                    }
+
+                    .search-input {
+                        font-size: 0.9rem;
+                        padding: 0.7rem 0.8rem 0.7rem 2.3rem !important;
+                    }
+                }
+            </style>
+        `;
+
+        document.head.insertAdjacentHTML('beforeend', additionalCSS);
+    </script>
+</body>
+</html>

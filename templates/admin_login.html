@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Login | AI Exam Proctoring</title>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+<style>
+:root{
+    --primary: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+    --secondary: #e0e0e0;
+    --dark: #000000;
+    --light: #ffffff;
+    --glass: rgba(255, 255, 255, 0.1);
+    --shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    --text: #ffffff;
+    --text-dark: #000000;
+    --gray: #808080;
+    --light-gray: #f5f5f5;
+}
+
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body{
+    min-height: 100vh;
+    background: linear-gradient(135deg, #000000 0%, #2a2a2a 50%, #000000 100%);
+    color: var(--text);
+    overflow-x: hidden;
+    animation: fadeIn 1s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ================= HEADER ================= */
+header{
+    position: absolute;
+    top: 0;
+    width: 100%;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+}
+
+.navbar{
+    max-width: 1200px;
+    margin: auto;
+    padding: 20px 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.logo{
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    animation: slideInLeft 1s ease-out;
+}
+
+.logo img{
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    box-shadow: var(--shadow);
+}
+
+.logo span{
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(45deg, #fff, #e0e0e0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.navbar a{
+    color: var(--text);
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    padding: 10px 20px;
+    border-radius: 25px;
+}
+
+.navbar a:hover{
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+/* ================= MAIN LAYOUT ================= */
+.main-container{
+    display: flex;
+    min-height: 100vh;
+    align-items: center;
+}
+
+.left-section{
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    animation: slideInLeft 1.2s ease-out;
+}
+
+.left-section::before{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, rgba(0, 0, 0, 0.6), rgba(64, 64, 64, 0.4));
+    z-index: 1;
+}
+
+.image-container{
+    position: relative;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.image-container img{
+    max-width: 80%;
+    max-height: 80%;
+    object-fit: cover;
+    border-radius: 20px;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+}
+
+.right-section{
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    animation: slideInRight 1.2s ease-out;
+}
+
+/* ================= LOGIN CARD ================= */
+.login-card{
+    width: 100%;
+    max-width: 450px;
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border-radius: 25px;
+    padding: 50px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    animation: scaleIn 1s ease-out 0.5s both;
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.login-card h2{
+    text-align: center;
+    margin-bottom: 10px;
+    font-weight: 700;
+    font-size: 32px;
+    background: linear-gradient(45deg, #fff, #e0e0e0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.login-card p{
+    text-align: center;
+    font-size: 16px;
+    opacity: 0.8;
+    margin-bottom: 40px;
+}
+
+/* INPUTS */
+.input-group{
+    margin-bottom: 25px;
+    position: relative;
+}
+
+.input-group input{
+    width: 100%;
+    padding: 18px 20px;
+    border: none;
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--text);
+    font-size: 16px;
+    outline: none;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.input-group input:focus{
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.7);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.input-group input::placeholder{
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.input-group i{
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* BUTTON */
+.login-btn{
+    width: 100%;
+    padding: 18px;
+    border: none;
+    border-radius: 50px;
+    background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+    color: var(--text-dark);
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 10px 30px rgba(255, 255, 255, 0.2);
+    margin-top: 20px;
+}
+
+.login-btn:hover{
+    transform: translateY(-3px);
+    box-shadow: 0 15px 40px rgba(255, 255, 255, 0.3);
+}
+
+.login-btn:active{
+    transform: translateY(-1px);
+}
+
+/* FOOTER TEXT */
+.footer-text{
+    text-align: center;
+    font-size: 14px;
+    margin-top: 30px;
+    opacity: 0.7;
+}
+
+/* ================= ANIMATIONS ================= */
+@keyframes slideInLeft {
+    from { transform: translateX(-100px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* ================= RESPONSIVE ================= */
+@media(max-width: 768px){
+    .main-container{
+        flex-direction: column;
+    }
+    .left-section{
+        height: 40vh;
+    }
+    .image-container{
+        height: 100%;
+    }
+    .right-section{
+        padding: 20px;
+    }
+    .login-card{
+        padding: 30px;
+        max-width: 100%;
+    }
+    .logo span{
+        font-size: 20px;
+    }
+}
+
+@media(max-width: 480px){
+    .navbar{
+        padding: 15px 20px;
+    }
+    .login-card{
+        padding: 25px;
+    }
+    .login-card h2{
+        font-size: 28px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ===== HEADER ===== -->
+<header>
+    <div class="navbar">
+        <div class="logo">
+            <img src="/static/home.jpg" alt="AI Proctor Logo">
+            <span>AI Proctor</span>
+        </div>
+        <a href="/"><i class="fas fa-home"></i> Home</a>
+    </div>
+</header>
+
+<!-- ===== MAIN CONTENT ===== -->
+<div class="main-container">
+    <!-- LEFT SECTION - IMAGE -->
+    <div class="left-section">
+        <div class="image-container">
+            <img src="/static/home.jpg" alt="Admin Login Illustration">
+        </div>
+    </div>
+
+    <!-- RIGHT SECTION - LOGIN CARD -->
+    <div class="right-section">
+        <div class="login-card">
+            <h2><i class="fas fa-shield-alt"></i> Admin Login</h2>
+            <p>Secure access for exam administrators</p>
+
+            <form method="post">
+                <div class="input-group">
+                    <input type="text" name="username" placeholder="Admin Username" required>
+                    <i class="fas fa-user"></i>
+                </div>
+
+                <div class="input-group">
+                    <input type="password" name="password" placeholder="Password" required>
+                    <i class="fas fa-lock"></i>
+                </div>
+
+                <button type="submit" class="login-btn">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+
+            <div class="footer-text">
+                <i class="fas fa-copyright"></i> 2026 AI Exam Proctoring System
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

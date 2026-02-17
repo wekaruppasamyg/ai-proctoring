@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exam | {{ subject }}</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+    --primary:#7c3aed;
+    --accent:#22d3ee;
+    --dark:#020617;
+    --glass:rgba(255,255,255,0.08);
+    --blur:blur(18px);
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Poppins',sans-serif;
+}
+
+body{
+    min-height:100vh;
+    background:
+        linear-gradient(120deg,rgba(0,0,0,0.75),rgba(2,6,23,0.9)),
+        url("https://via.placeholder.com/1920x1080/0a0a0a/ffffff?text=Exam+Background+Image") center/cover no-repeat fixed; /* Added a placeholder background image */
+    color:#e5e7eb;
+}
+
+/* ===== HEADER ===== */
+header{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    z-index:100;
+    background:rgba(2,6,23,0.7);
+    backdrop-filter:var(--blur);
+    border-bottom:1px solid rgba(255,255,255,0.08);
+}
+
+.navbar{
+    max-width:1200px;
+    margin:auto;
+    padding:16px 30px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+}
+
+.logo span{
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #6366F1;
+    text-shadow: 1px 2px 8px rgba(99,102,241,0.18);
+    margin-left: 10px;
+    vertical-align: middle;
+    font-family: 'Poppins', sans-serif;
+}
+
+.logo img {
+    height: 44px;
+    width: 44px;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(99,102,241,0.12);
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+.exam-title{
+    font-size:13px;
+    opacity:0.8;
+}
+
+/* ===== PAGE FADE ===== */
+.wrapper{
+    padding:120px 20px 40px;
+    max-width:1200px;
+    margin:auto;
+    animation:pageFade 0.8s ease;
+}
+
+@keyframes pageFade{
+    from{opacity:0; transform:translateY(25px);}
+    to{opacity:1; transform:translateY(0);}
+}
+
+/* ===== GRID ===== */
+.grid{
+    display:grid;
+    grid-template-columns:330px 1fr;
+    gap:30px;
+}
+
+/* ===== CAMERA CARD ===== */
+.camera-card{
+    background:rgba(15,23,42,0.65);
+    backdrop-filter:var(--blur);
+    border-radius:22px;
+    padding:22px;
+    text-align:center;
+    box-shadow:0 30px 60px rgba(0,0,0,0.6);
+    animation:slideLeft 0.7s ease;
+}
+
+.camera-card video{
+    width:100%;
+    border-radius:16px;
+    border:3px solid transparent;
+    background:
+        linear-gradient(#020617,#020617) padding-box,
+        linear-gradient(120deg,var(--primary),var(--accent)) border-box;
+    /* Removed animation: pulseBorder */
+}
+
+/* ===== QUIZ CARD ===== */
+.quiz-card{
+    background:rgba(2,6,23,0.75);
+    backdrop-filter:var(--blur);
+    border-radius:24px;
+    padding:30px;
+    box-shadow:0 40px 80px rgba(0,0,0,0.6);
+    animation:slideRight 0.7s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.quiz-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url("/static/home.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0.3; /* Added opacity to the background image */
+    z-index: -1;
+}
+
+@keyframes slideLeft{
+    from{opacity:0; transform:translateX(-40px);}
+    to{opacity:1; transform:translateX(0);}
+}
+
+@keyframes slideRight{
+    from{opacity:0; transform:translateX(40px);}
+    to{opacity:1; transform:translateX(0);}
+}
+
+/* ===== QUESTION ===== */
+.question{
+    display:none;
+    animation:questionSlide 0.4s ease;
+}
+
+.question.active{
+    display:block;
+}
+
+@keyframes questionSlide{
+    from{opacity:0; transform:translateX(20px);}
+    to{opacity:1; transform:translateX(0);}
+}
+
+.timer{
+    font-size:18px;
+    font-weight:600;
+    color:red;
+    margin-bottom:20px;
+    text-align:right;
+}
+
+.option{
+    display:block;
+    padding:14px 18px;
+    margin-bottom:12px;
+    background:rgba(255,255,255,0.05);
+    border-radius:14px;
+    cursor:pointer;
+    transition:0.3s;
+    border:1px solid rgba(255,255,255,0.08);
+}
+
+.option:hover{
+    background:rgba(124,58,237,0.25);
+    transform:translateX(6px);
+}
+
+/* ===== BUTTONS ===== */
+.submit-btn{
+    background: white; /* Changed to black */
+    color: black; /* Ensure text is visible */
+    font-weight:600;
+    letter-spacing:0.4px;
+    border:none;
+    box-shadow:0 15px 35px rgba(0,0,0,0.6);
+    margin: 20px auto; /* Center the button */
+    display: block;
+    width: fit-content;
+    padding: 14px 30px;
+    border-radius: 30px;
+}
+
+.nav-btn{
+
+    background:rgb(251, 247, 247);
+    color:black;
+    font-size: 16px;
+    padding: 10px;
+    border-radius: 10px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+}
+.nav-btn:hover:not(:disabled){
+    background:linear-gradient(135deg,var(--primary),var(--accent));
+}
+
+/* ===== ALERTS ===== */
+#error-message,
+#cheat-message,
+#camera-hidden-message,
+#hand-cover-message,
+#blink-message{
+    animation:shake 0.4s ease;
+}
+
+@keyframes shake{
+    0%{transform:translateX(0)}
+    25%{transform:translateX(-6px)}
+    50%{transform:translateX(6px)}
+    75%{transform:translateX(-6px)}
+    100%{transform:translateX(0)}
+}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:900px){
+    .grid{grid-template-columns:1fr;}
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- ===== HEADER ===== -->
+<header>
+    <div class="navbar">
+        <div class="logo">
+            <!-- Replace logo -->
+            <img src="/static/home.jpg" alt="Logo">
+            <span>AI Proctor</span>
+        </div>
+        <div class="exam-title">Exam: {{ subject }}</div>
+    </div>
+</header>
+
+<!-- ===== CONTENT ===== -->
+<div class="wrapper">
+
+    <div class="grid">
+
+        <!-- CAMERA -->
+        <div class="camera-card">
+            <h3>Live Proctoring</h3>
+        <video id="video" autoplay muted></video>
+
+<canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+
+<div id="error-message" style="display:none;color:#ff4444;font-weight:bold;margin-top:10px;">
+    You are looking away from the screen!
+</div>
+
+<div id="cheat-message" style="display:none;color:#ff0000;font-weight:bold;margin-top:10px;">
+    ❌ Another person detected!
+</div>
+
+<div id="camera-hidden-message" style="display:none;color:#ff4444;font-weight:bold;margin-top:10px;">
+    Your camera is hidden!
+</div>
+
+<div id="hand-cover-message" style="display:none;color:#ff4444;font-weight:bold;margin-top:10px;">
+    ⚠️ Hand covering camera detected! (Frames: <span id="hand-cover-counter">0</span>)
+</div>
+
+<div id="hand-detection-status" style="color:#666;font-size:12px;margin-top:5px;">
+    Hand detection: <span id="hand-status">Initializing...</span>
+</div>
+
+<div id="blink-message" style="display:none;color:#ff4444;font-weight:bold;margin-top:10px;">
+    ⚠️ No blink detected for 10 seconds — please blink!
+</div>
+
+        </div>
+
+        <!-- QUIZ -->
+        <div class="quiz-card">
+            <form method="POST" action="/submit-exam" id="exam-form">
+                <input type="hidden" name="subject" value="{{ subject }}">
+
+                {% if questions|length == 0 %}
+                    <p>No questions available for this subject.</p>
+                {% else %}
+                    <div class="question-counter">
+                        <span id="current-q">1</span> / <span id="total-q">{{ questions|length }}</span>
+                    </div>
+
+                    <div class="timer">
+                        Time left: <span id="timer">30</span> seconds
+                    </div>
+
+                    {% for q in questions %}
+                    <div class="question {% if loop.index == 1 %}active{% endif %}" data-question="{{ loop.index }}" data-skipped="false">
+                        <p><strong>Question {{ loop.index }}:</strong> {{ q[1] }}</p>
+
+                        <label class="option">
+                            <input type="radio" name="{{ q[0] }}" value="1"> {{ q[2] }}
+                        </label>
+                        <label class="option">
+                            <input type="radio" name="{{ q[0] }}" value="2"> {{ q[3] }}
+                        </label>
+                        <label class="option">
+                            <input type="radio" name="{{ q[0] }}" value="3"> {{ q[4] }}
+                        </label>
+                        <label class="option">
+                            <input type="radio" name="{{ q[0] }}" value="4"> {{ q[5] }}
+                        </label>
+                    </div>
+                    {% endfor %}
+
+                    <div class="nav-buttons">
+                        <button type="button" class="nav-btn" id="skip-btn" onclick="skipQuestion()" style="margin-right:18px;">Skip</button>
+                        <button type="button" class="nav-btn" id="next-btn" onclick="changeQuestion(1)">Next →</button>
+
+                    </div>
+
+                    <button type="submit" class="submit-btn" id="submit-btn" style="display:none;">Submit Exam</button>
+                {% endif %}
+            </form>
+            <!-- Skipped Questions Modal -->
+            <div id="skipped-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">
+                <div style="background:#222;padding:40px 30px;border-radius:18px;max-width:600px;margin:auto;box-shadow:0 8px 32px #000;">
+                    <h2 style="color:#22d3ee;text-align:center;margin-bottom:18px;">Skipped Questions</h2>
+                    <div id="skipped-list" style="color:#fff;font-size:18px;"></div>
+                    <button onclick="closeSkippedModal()" style="margin-top:24px;padding:10px 28px;border-radius:8px;background:#22d3ee;color:#222;font-weight:600;border:none;">Close</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// Question Navigation & Skip Logic
+let currentQuestion = 1;
+const totalQuestions = parseInt(document.getElementById('total-q').textContent);
+let timerInterval;
+let timeLeft = 30;
+let skippedQuestions = [];
+let showingSkipped = false;
+
+function startTimer() {
+    timeLeft = 30;
+    document.getElementById('timer').textContent = timeLeft;
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer').textContent = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            if (!showingSkipped) {
+                if (currentQuestion < totalQuestions) {
+                    changeQuestion(1);
+                } else {
+                    showSkippedQuestions();
+                }
+            } else {
+                if (skippedQuestions.length > 0) {
+                    goToSkippedQuestion(0);
+                } else {
+                    document.getElementById('exam-form').submit();
+                }
+            }
+        }
+    }, 1000);
+}
+
+function resetTimer() {
+    clearInterval(timerInterval);
+    startTimer();
+}
+
+function changeQuestion(direction) {
+    let newQuestion = currentQuestion + direction;
+    if (!showingSkipped) {
+        if (newQuestion < 1 || newQuestion > totalQuestions) {
+            return;
+        }
+        document.querySelector(`.question[data-question="${currentQuestion}"]`).classList.remove('active');
+        document.querySelector(`.question[data-question="${newQuestion}"]`).classList.add('active');
+        currentQuestion = newQuestion;
+        document.getElementById('current-q').textContent = currentQuestion;
+        // Hide skip button if last question
+        if (currentQuestion === totalQuestions) {
+            document.getElementById('next-btn').style.display = 'none';
+            document.getElementById('skip-btn').style.display = 'block';
+            document.getElementById('submit-btn').style.display = 'none';
+        } else {
+            document.getElementById('next-btn').style.display = 'block';
+            document.getElementById('skip-btn').style.display = 'block';
+            document.getElementById('submit-btn').style.display = 'none';
+        }
+        resetTimer();
+    } else {
+        // In skipped questions mode
+        if (skippedQuestions.length === 0) {
+            document.getElementById('exam-form').submit();
+            return;
+        }
+        let idx = skippedQuestions.indexOf(currentQuestion);
+        let newIdx = idx + direction;
+        if (newIdx < 0 || newIdx >= skippedQuestions.length) return;
+        document.querySelector(`.question[data-question="${currentQuestion}"]`).classList.remove('active');
+        goToSkippedQuestion(newIdx);
+        resetTimer();
+    }
+}
+
+function skipQuestion() {
+    if (!skippedQuestions.includes(currentQuestion)) {
+        skippedQuestions.push(currentQuestion);
+    }
+    if (currentQuestion < totalQuestions) {
+        changeQuestion(1);
+    } else {
+        showSkippedQuestions();
+    }
+}
+
+function showSkippedQuestions() {
+    if (skippedQuestions.length === 0) {
+        document.getElementById('exam-form').submit();
+        return;
+    }
+    showingSkipped = true;
+    document.getElementById('next-btn').style.display = 'block';
+    document.getElementById('skip-btn').style.display = 'none';
+    document.getElementById('submit-btn').style.display = 'block';
+    document.getElementById('current-q').textContent = skippedQuestions[0];
+    document.querySelectorAll('.question').forEach(q => q.classList.remove('active'));
+    goToSkippedQuestion(0);
+}
+
+function goToSkippedQuestion(idx) {
+    let qNum = skippedQuestions[idx];
+    document.querySelectorAll('.question').forEach(q => q.classList.remove('active'));
+    document.querySelector(`.question[data-question="${qNum}"]`).classList.add('active');
+    currentQuestion = qNum;
+    document.getElementById('current-q').textContent = currentQuestion;
+    // If last skipped question, show submit
+    if (idx === skippedQuestions.length - 1) {
+        document.getElementById('next-btn').style.display = 'none';
+        document.getElementById('submit-btn').style.display = 'block';
+    } else {
+        document.getElementById('next-btn').style.display = 'block';
+        document.getElementById('submit-btn').style.display = 'none';
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('skip-btn').style.display = 'block';
+    document.getElementById('next-btn').style.display = (totalQuestions === 1) ? 'none' : 'block';
+    document.getElementById('submit-btn').style.display = (totalQuestions === 1) ? 'block' : 'none';
+    startTimer();
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script>
+// Start webcam
+const video = document.getElementById('video');
+let stream;
+
+navigator.mediaDevices.getUserMedia({ video: true })
+    .then(s => {
+        stream = s;
+        video.srcObject = stream;
+    })
+    .catch(() => alert("Camera access denied!"));
+
+const errorMessage = document.getElementById('error-message');
+const cameraHiddenMessage = document.getElementById('camera-hidden-message');
+const handCoverMessage = document.getElementById('hand-cover-message');
+const handStatus = document.getElementById('hand-status');
+const blinkMessage = document.getElementById('blink-message');
+const videoElement = document.getElementById('video');
+let lookingAwayFrames = 0;
+const LOOKING_AWAY_THRESHOLD = 15;
+let handCoverFrames = 0;
+const HAND_COVER_THRESHOLD = 30;
+
+// Blink detection state
+let lastBlinkTime = Date.now();
+let eyeClosed = false;
+const BLINK_EAR_THRESHOLD = 0.22; // tuning may be needed
+
+function isLookingAway(landmarks) {
+    const nose = landmarks[1];
+    const leftEye = landmarks[33];
+    const rightEye = landmarks[263];
+    if (nose.x < leftEye.x || nose.x > rightEye.x) {
+        return true;
+    }
+    return false;
+}
+
+function euclidean(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+faceMesh.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+});
+faceMesh.onResults(results => {
+    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+
+        // Looking away
+        if (isLookingAway(landmarks)) {
+            lookingAwayFrames++;
+        } else {
+            lookingAwayFrames = 0;
+        }
+        if (lookingAwayFrames > LOOKING_AWAY_THRESHOLD) {
+            errorMessage.style.display = 'block';
+            fetch("/monitor-exam", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: null, event: "looking_away" })
+            }).catch(()=>{});
+        } else {
+            errorMessage.style.display = 'none';
+        }
+
+        // Blink detection (EAR-like)
+        try {
+            const leftV = euclidean(landmarks[159], landmarks[145]);
+            const leftH = euclidean(landmarks[33], landmarks[133]);
+            const rightV = euclidean(landmarks[386], landmarks[374]);
+            const rightH = euclidean(landmarks[362], landmarks[263]);
+            const ear = (leftV + rightV) / (leftH + rightH);
+
+            if (ear < BLINK_EAR_THRESHOLD) {
+                // eyes appear closed
+                if (!eyeClosed) {
+                    eyeClosed = true;
+                }
+            } else {
+                // eyes open
+                if (eyeClosed) {
+                    // closed -> open transition: record last blink time
+                    lastBlinkTime = Date.now();
+                    eyeClosed = false;
+                    blinkMessage.style.display = 'none';
+                }
+            }
+        } catch (e) {
+            console.warn('Blink detection error', e);
+        }
+
+    } else {
+        errorMessage.style.display = 'none';
+        lookingAwayFrames = 0;
+    }
+});
+
+// Check for missing blink (every second); alert and send DB/store event if no blink within 10s
+setInterval(() => {
+    if (Date.now() - lastBlinkTime > 10000) {
+        blinkMessage.style.display = 'block';
+        fetch('/monitor-exam', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: 'no_blink', last_blink: lastBlinkTime })
+        }).catch(()=>{});
+    } else {
+        blinkMessage.style.display = 'none';
+    }
+}, 1000);
+
+const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+});
+hands.onResults(results => {
+    const handCount = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+    handStatus.textContent = `${handCount} hand(s) detected`;
+    handStatus.style.color = handCount > 0 ? '#00aa00' : '#666';
+    
+    console.log("Hands detected:", handCount);
+    
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        // Check if hand is covering significant portion of camera
+        let handCovering = false;
+        for (const landmarks of results.multiHandLandmarks) {
+            // Check if palm center is in center area of frame
+            const palmCenterX = (landmarks[0].x + landmarks[5].x + landmarks[17].x) / 3;
+            const palmCenterY = (landmarks[0].y + landmarks[5].y + landmarks[17].y) / 3;
+            
+            console.log("Palm center:", palmCenterX.toFixed(2), palmCenterY.toFixed(2), "Z:", landmarks[0].z.toFixed(2));
+            
+            // If hand is in center 80% of frame (more sensitive)
+            if (palmCenterX > 0.1 && palmCenterX < 0.9 && 
+                palmCenterY > 0.1 && palmCenterY < 0.9) { // Removed Z-depth check for now
+                handCovering = true;
+                console.log("Hand covering detected!");
+                break;
+            }
+        }
+        
+        if (handCovering) {
+            handCoverFrames++;
+            console.log("Hand cover frames:", handCoverFrames);
+        } else {
+            handCoverFrames = 0;
+        }
+        
+        if (handCoverFrames > HAND_COVER_THRESHOLD) {
+            console.log("Hand cover threshold reached - showing message");
+            handCoverMessage.style.display = 'block';
+            document.getElementById('hand-cover-counter').textContent = handCoverFrames;
+            // Notify backend for hand covering camera
+            fetch("/monitor-exam", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ event: "hand_cover" })
+            });
+        } else {
+            handCoverMessage.style.display = 'none';
+        }
+    } else {
+        handCoverMessage.style.display = 'none';
+        handCoverFrames = 0;
+    }
+});
+
+const camera = new Camera(videoElement, {
+    onFrame: async () => {
+        await faceMesh.send({image: videoElement});
+        await hands.send({image: videoElement});
+    },
+    width: 640,
+    height: 480
+});
+camera.start();
+</script>
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const cheatMessage = document.getElementById("cheat-message");
+
+function isCameraHidden(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    let totalBrightness = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+        totalBrightness += (r + g + b) / 3;
+    }
+    const avgBrightness = totalBrightness / (data.length / 4);
+    return avgBrightness < 50; // Adjusted threshold for better detection of covering
+}
+
+// Send frame to backend every 5 seconds (for monitoring) and as MJPEG stream (for live)
+setInterval(() => {
+    if (!video.srcObject) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    if (isCameraHidden(canvas)) {
+        cameraHiddenMessage.style.display = 'block';
+        // Notify backend for camera hidden event
+        fetch("/monitor-exam", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event: "camera_hidden" })
+        });
+    } else {
+        cameraHiddenMessage.style.display = 'none';
+    }
+
+    const imageData = canvas.toDataURL("image/jpeg");
+
+    // Monitoring logic (cheating, etc)
+    fetch("/monitor-exam", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: imageData })
+    })
+    .then(res => res.json())
+    .then(data => {
+        const examForm = document.getElementById("exam-form");
+        const blockOverlay = document.getElementById("block-overlay");
+        if (data.status === "cheating") {
+            cheatMessage.innerHTML = `❌ Cheating detected! Count: ${data.cheating_count}/10`;
+            cheatMessage.style.display = "block";
+            if (blockOverlay) blockOverlay.style.display = "flex";
+            if (examForm) {
+                examForm.style.pointerEvents = "none";
+                examForm.style.opacity = "0.5";
+            }
+        } else if (data.status === "terminated") {
+            cheatMessage.innerHTML = `❌ Exam terminated due to excessive cheating! Count: ${data.cheating_count}`;
+            cheatMessage.style.display = "block";
+            if (blockOverlay) blockOverlay.style.display = "flex";
+            if (examForm) {
+                examForm.style.pointerEvents = "none";
+                examForm.style.opacity = "0.5";
+            }
+            alert("Your exam has been terminated due to cheating.");
+        } else {
+            cheatMessage.style.display = "none";
+            if (blockOverlay) blockOverlay.style.display = "none";
+            if (examForm) {
+                examForm.style.pointerEvents = "auto";
+                examForm.style.opacity = "1";
+            }
+        }
+    })
+    .catch(err => console.error("Monitoring error:", err));
+}, 5000);
+
+// MJPEG live streaming: send frames as binary to /upload-frame as fast as possible
+function sendLiveFrame() {
+    if (!video.srcObject) {
+        setTimeout(sendLiveFrame, 200);
+        return;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(function(blob) {
+        if (blob) {
+            fetch('/upload-frame', {
+                method: 'POST',
+                body: blob
+            }).finally(() => {
+                setTimeout(sendLiveFrame, 100); // ~10 fps
+            });
+        } else {
+            setTimeout(sendLiveFrame, 100);
+        }
+    }, 'image/jpeg');
+}
+sendLiveFrame();
+</script>
+<script>
+// ================= KEYBOARD & MOUSE RESTRICTIONS =================
+
+// Disable right click
+document.addEventListener("contextmenu", e => e.preventDefault());
+
+// Disable key combinations
+document.addEventListener("keydown", function (e) {
+
+    // Block Ctrl-based shortcuts
+    if (e.ctrlKey && (
+        e.key === "c" || e.key === "v" || e.key === "x" ||
+        e.key === "a" || e.key === "u" || e.key === "s"
+    )) {
+        e.preventDefault();
+        alert("⚠ Keyboard shortcuts are disabled during the exam!");
+    }
+
+    // Block function keys
+    if (
+        e.key === "F12" ||   // DevTools
+        e.key === "F5"  ||   // Refresh
+        (e.ctrlKey && e.key === "r")
+    ) {
+        e.preventDefault();
+        alert("⚠ Action not allowed during exam!");
+    }
+
+    // Block Alt + Tab (limited support)
+    if (e.altKey && e.key === "Tab") {
+        e.preventDefault();
+        alert("⚠ Switching tabs is not allowed!");
+    }
+});
+
+// Detect tab change and notify backend
+document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+        alert("⚠ Tab switching detected!");
+        // Notify backend
+        fetch("/tab-switch", { method: "POST" });
+    }
+});
+</script>
+
+
+<!-- Overlay to block quiz when another person is detected -->
+<div id="block-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.85);z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
+    <div id="block-person-message" style="color:#fff;font-size:2rem;font-weight:bold;text-align:center;">
+        Quiz Blocked<br>Another person detected!<br>
+        <span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>
+    </div>
+    <div id="block-noise-message" style="color:#fff;font-size:2rem;font-weight:bold;text-align:center;display:none;">
+        Quiz Blocked<br>Unwanted noise detected!<br>
+        <span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>
+    </div>
+</div>
+<script>
+// ===== UNWANTED NOISE DETECTION =====
+let audioContext;
+let analyser;
+let microphone;
+let noiseBlocked = false;
+const blockOverlay = document.getElementById("block-overlay");
+const blockPersonMessage = document.getElementById("block-person-message");
+const blockNoiseMessage = document.getElementById("block-noise-message");
+const examForm = document.getElementById("exam-form");
+
+function startNoiseDetection() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            microphone = audioContext.createMediaStreamSource(stream);
+            microphone.connect(analyser);
+            analyser.fftSize = 512;
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            function detectNoise() {
+                analyser.getByteFrequencyData(dataArray);
+                // Calculate average volume
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                const avg = sum / dataArray.length;
+                // Threshold: adjust as needed (e.g., 40 is moderate)
+                if (avg > 40) {
+                    if (!noiseBlocked) {
+                        noiseBlocked = true;
+                        if (blockOverlay) {
+                            blockOverlay.style.display = "flex";
+                            if (blockNoiseMessage) blockNoiseMessage.style.display = "block";
+                            if (blockPersonMessage) blockPersonMessage.style.display = "none";
+                        }
+                        if (examForm) {
+                            examForm.style.pointerEvents = "none";
+                            examForm.style.opacity = "0.5";
+                        }
+                    }
+                } else {
+                    if (noiseBlocked) {
+                        noiseBlocked = false;
+                        if (blockOverlay) blockOverlay.style.display = "none";
+                        if (blockNoiseMessage) blockNoiseMessage.style.display = "none";
+                        if (blockPersonMessage) blockPersonMessage.style.display = "block";
+                        if (examForm) {
+                            examForm.style.pointerEvents = "auto";
+                            examForm.style.opacity = "1";
+                        }
+                    }
+                }
+                requestAnimationFrame(detectNoise);
+            }
+            detectNoise();
+        })
+        .catch(function(err) {
+            console.warn("Audio access denied or error:", err);
+        });
+}
+
+// Start noise detection after DOM loaded
+window.addEventListener("DOMContentLoaded", startNoiseDetection);
+</script>
+
+</body>
+</html>

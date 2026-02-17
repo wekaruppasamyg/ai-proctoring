@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Login | AI Proctor</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Poppins',sans-serif;
+}
+
+body{
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    color:#ffffff;
+    font-family:'Poppins',sans-serif;
+    overflow: hidden;
+    position: relative;
+}
+
+.container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+h1 {
+    margin-bottom: 20px;
+    font-size: 4em;
+    background: linear-gradient(45deg, #00d4ff, #ff2d55);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: glow 2s ease-in-out infinite alternate;
+    text-shadow: 0 0 30px rgba(0,212,255,0.5);
+    z-index: 2;
+}
+
+@keyframes glow {
+    from { filter: brightness(1); }
+    to { filter: brightness(1.2); }
+}
+
+p {
+    font-size: 1.5em;
+    margin-bottom: 50px;
+    opacity: 0.9;
+    text-align: center;
+    max-width: 800px;
+    line-height: 1.4;
+    z-index: 2;
+}
+
+.video-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 50vw;
+    height: 50vh;
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.45);
+    z-index: 0;
+}
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+#video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border: none;
+}
+
+#canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.status {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 2em;
+    font-weight: 600;
+    padding: 25px 50px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 40px;
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255,255,255,0.2);
+    animation: pulse 2s infinite;
+    z-index: 2;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="video-container">
+        <video id="video" autoplay></video>
+        <canvas id="canvas"></canvas>
+    </div>
+    <div class="overlay">
+        <h1>AI Hand Gesture Login</h1>
+        <p>Open your palm to activate login menu, then hover over LOGIN and hold for 2 seconds.</p>
+        <div class="status" id="status">Initializing camera...</div>
+    </div>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusDiv = document.getElementById('status');
+
+let hands;
+let camera;
+let menuActive = false;
+let loginOpened = false;
+let particle = null;
+let hoverStart = null;
+const HOLD_TIME = 2;
+
+const CYAN = 'rgb(255, 255, 0)';
+const ORANGE = 'rgb(0, 165, 255)';
+const RED = 'rgb(0, 0, 255)';
+const DIM_RED = 'rgb(0, 0, 120)';
+
+class LoginParticle3D {
+    constructor() {
+        this.baseX = canvas.width / 2;
+        this.baseY = 80;
+        this.z = Math.random() * 0.8 + 0.6;
+        this.zSpeed = (Math.random() - 0.5) * 0.006;
+        this.scale = 1 / this.z;
+        this.x = Math.floor(this.baseX);
+        this.y = Math.floor(this.baseY);
+        this.r = Math.floor(16 * this.scale);
+    }
+
+    update() {
+        this.z += this.zSpeed;
+        if (this.z < 0.5 || this.z > 1.5) {
+            this.zSpeed *= -1;
+        }
+        this.scale = 1 / this.z;
+        this.x = Math.floor(this.baseX);
+        this.y = Math.floor(this.baseY);
+        this.r = Math.floor(13 * this.scale);
+    }
+
+    draw(color, occluded = false) {
+        if (!occluded) {
+            for (let i = 7; i > 2; i -= 2) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.r + i, 0, 2 * Math.PI);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
+            ctx.fillStyle = DIM_RED;
+            ctx.fill();
+        }
+
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(this.x - 50, this.y + this.r + 10, 100, 30);
+        ctx.fillStyle = color;
+        ctx.font = `${1.0 * this.scale}em Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText('LOGIN', this.x, this.y + this.r + 32);
+    }
+
+    isHovered(fx, fy) {
+        return Math.hypot(this.x - fx, this.y - fy) < this.r;
+    }
+}
+
+function isOpenPalm(lm) {
+    const tips = [8, 12, 16, 20];
+    return tips.filter(t => lm[t].y < lm[t - 2].y).length >= 4;
+}
+
+function drawHologramRing(cx, cy, radius, angleOffset) {
+    for (let i = 0; i < 360; i += 12) {
+        const rad = (i + angleOffset) * Math.PI / 180;
+        const x = cx + radius * Math.cos(rad);
+        const y = cy + radius * Math.sin(rad);
+        ctx.beginPath();
+        ctx.arc(x, y, 1.0, 0, 2 * Math.PI);
+        ctx.fillStyle = ORANGE;
+        ctx.fill();
+    }
+}
+
+function drawScanCircle(cx, cy, radius) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = CYAN;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius + 10, 0, 2 * Math.PI);
+    ctx.strokeStyle = ORANGE;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+}
+
+function onResults(results) {
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const hand = results.multiHandLandmarks[0];
+        const lm = hand;
+
+        const cx = (lm[0].x + lm[5].x + lm[17].x) / 3 * canvas.width;
+        const cy = (lm[0].y + lm[5].y + lm[17].y) / 3 * canvas.height;
+
+        const fx = lm[8].x * canvas.width;
+        const fy = lm[8].y * canvas.height;
+
+        drawHologramRing(cx, cy, 50, 0);
+        drawHologramRing(cx, cy, 78, 0);
+        drawScanCircle(cx, cy, 100);
+
+        if (isOpenPalm(lm) && !menuActive) {
+            menuActive = true;
+            loginOpened = false;
+            particle = new LoginParticle3D();
+            statusDiv.textContent = 'Menu activated! Hover over LOGIN and hold.';
+        }
+
+        if (menuActive && particle) {
+            particle.update();
+
+            const hovered = particle.isHovered(fx, fy);
+            const occluded = hovered && lm[8].z < -0.03;
+
+            let color = CYAN;
+            if (hovered) {
+                if (hoverStart === null) {
+                    hoverStart = Date.now() / 1000;
+                }
+                const elapsed = Date.now() / 1000 - hoverStart;
+                color = elapsed > 1 ? RED : ORANGE;
+                if (elapsed >= HOLD_TIME && !loginOpened) {
+                    loginOpened = true;
+                    statusDiv.textContent = 'Login successful! Redirecting...';
+                    setTimeout(() => {
+                        window.location.href = '/student-login';
+                    }, 1000);
+                } else if (!loginOpened) {
+                    statusDiv.textContent = `Hold for ${Math.ceil(HOLD_TIME - elapsed)} seconds...`;
+                }
+            } else {
+                hoverStart = null;
+                statusDiv.textContent = 'Hover over LOGIN and hold.';
+            }
+
+            particle.draw(color, occluded);
+
+            if (hovered && !loginOpened) {
+                const elapsed = Date.now() / 1000 - hoverStart;
+                const progress = (elapsed / HOLD_TIME) * 360;
+
+                ctx.beginPath();
+                ctx.ellipse(particle.x, particle.y, particle.r + 14, particle.r + 14, 0, 0, progress * Math.PI / 180);
+                ctx.strokeStyle = RED;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+        }
+
+        // Draw hand landmarks
+        for (const landmark of hand) {
+            ctx.beginPath();
+            ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 1.4, 0, 2 * Math.PI);
+            ctx.fillStyle = ORANGE;
+            ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.arc(fx, fy, 3, 0, 2 * Math.PI);
+        ctx.fillStyle = ORANGE;
+        ctx.fill();
+    } else {
+        statusDiv.textContent = 'No hand detected. Show your hand to the camera.';
+    }
+
+    ctx.restore();
+}
+
+async function init() {
+    hands = new Hands({
+        locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }
+    });
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.8,
+        minTrackingConfidence: 0.8
+    });
+    hands.onResults(onResults);
+
+    camera = new Camera(video, {
+        onFrame: async () => {
+            await hands.send({image: video});
+        },
+        width: window.innerWidth,
+        height: window.innerHeight
+    });
+    await camera.start();
+    statusDiv.textContent = 'Camera ready. Open your palm to start.';
+}
+
+init();
+</script>
+</body>
+</html></content>
+<parameter name="filePath">d:\Ai Proctoring\templates\ai_login.html
