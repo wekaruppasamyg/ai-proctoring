@@ -1,5 +1,5 @@
 import cv2
-# import mediapipe as mp
+import mediapipe as mp
 import math
 import random
 import time
@@ -7,13 +7,13 @@ import webbrowser
 import os
 
 # ================= MEDIAPIPE =================
-# mp_hands = mp.solutions.hands
-# hands = mp_hands.Hands(
-#     max_num_hands=1,
-#     min_detection_confidence=0.7,
-#     min_tracking_confidence=0.7
-# )
-# mp_draw = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(
+    max_num_hands=1,
+    min_detection_confidence=0.7,
+    min_tracking_confidence=0.7
+)
+mp_draw = mp.solutions.drawing_utils
 
 # ================= CAMERA =================
 cap = cv2.VideoCapture(0)
