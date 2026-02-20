@@ -1,5 +1,10 @@
 from flask import Flask, render_template, request, redirect, session, url_for, Response
-import os, sqlite3, random, string, base64, shutil
+import os
+import psycopg2
+import random
+import string
+import base64
+import shutil
 from datetime import datetime
 import cv2
 import numpy as np
@@ -40,21 +45,17 @@ def mjpeg_stream(username):
     return Response(gen_mjpeg(username), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 # ================= DATABASE INIT =================
-def get_db_path():
-    # Use /tmp for cloud (Render), current dir for local
-    if os.environ.get('RENDER_INSTANCE_ID'):  # Render sets this
-        return os.path.join('/tmp', 'users.db')
-    else:
-        return 'users.db'
+
+def get_db_connection():
+    return psycopg2.connect(os.environ['DATABASE_URL'])
 
 def init_db():
-    db_path = get_db_path()
-    conn = sqlite3.connect(db_path)
+    conn = get_db_connection()
     cur = conn.cursor()
     # Camera events table for timestamped logs
     cur.execute("""
     CREATE TABLE IF NOT EXISTS camera_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         username TEXT,
         event_type TEXT,
         event_time TEXT,
@@ -64,7 +65,7 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT,
         email TEXT,
         username TEXT,
@@ -74,14 +75,14 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS subjects (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT
     )
     """)
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS questions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         subject_id INTEGER,
         question TEXT,
         opt1 TEXT,
@@ -94,7 +95,7 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         username TEXT,
         subject TEXT,
         score INTEGER,
@@ -108,80 +109,16 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS materials (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
         filename TEXT NOT NULL,
         filepath TEXT NOT NULL,
         subject_id INTEGER,
         upload_date TEXT,
-        FOREIGN KEY (subject_id) REFERENCES subjects (id)
+        enabled BOOLEAN DEFAULT TRUE
     )
     """)
-
-    # Add columns if they don't exist (for migration)
-    try:
-        cur.execute("ALTER TABLE results ADD COLUMN cheating_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    try:
-        cur.execute("ALTER TABLE results ADD COLUMN terminated BOOLEAN DEFAULT FALSE")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    try:
-        cur.execute("ALTER TABLE results ADD COLUMN looking_away_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    try:
-        cur.execute("ALTER TABLE results ADD COLUMN camera_hidden_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    try:
-        cur.execute("ALTER TABLE results ADD COLUMN hand_cover_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    # If an old results table contains `blink_count`, migrate to remove that column
-    try:
-        cur.execute("PRAGMA table_info(results)")
-        cols = [r[1] for r in cur.fetchall()]
-        if 'blink_count' in cols:
-            # Create a new table without blink_count
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS results_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT,
-                subject TEXT,
-                score INTEGER,
-                date TEXT,
-                cheating_count INTEGER DEFAULT 0,
-                terminated BOOLEAN DEFAULT FALSE,
-                looking_away_count INTEGER DEFAULT 0,
-                tab_switch_count INTEGER DEFAULT 0,
-                camera_hidden_count INTEGER DEFAULT 0,
-                hand_cover_count INTEGER DEFAULT 0,
-                no_blink_count INTEGER DEFAULT 0
-            )
-            """)
-            # Copy data excluding blink_count
-            cur.execute("INSERT INTO results_new (id,username,subject,score,date,cheating_count,terminated,looking_away_count,tab_switch_count,camera_hidden_count,hand_cover_count,no_blink_count) SELECT id,username,subject,score,date,cheating_count,terminated,looking_away_count,tab_switch_count,camera_hidden_count,hand_cover_count,no_blink_count FROM results")
-            cur.execute("DROP TABLE results")
-            cur.execute("ALTER TABLE results_new RENAME TO results")
-            conn.commit()
-    except Exception:
-        # If results doesn't exist yet or migration fails, ignore and continue
-        pass
-    try:
-        cur.execute("ALTER TABLE results ADD COLUMN no_blink_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    try:
-        cur.execute("ALTER TABLE subjects ADD COLUMN enabled BOOLEAN DEFAULT 1")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    try:
-        cur.execute("ALTER TABLE materials ADD COLUMN enabled BOOLEAN DEFAULT 1")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
 
     conn.commit()
     conn.close()
@@ -278,7 +215,7 @@ def register():
         username = generate_username(name)
         password = generate_password()
 
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO users(name,email,username,password) VALUES(?,?,?,?)",
@@ -343,7 +280,7 @@ def login_check():
     u = request.form["username"]
     p = request.form["password"]
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
         "SELECT * FROM users WHERE username=? AND password=?",
@@ -370,7 +307,7 @@ def student_dashboard():
     if "username" not in session:
         return redirect(url_for("student_login"))
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
 
     cur.execute("SELECT name,email,username FROM users WHERE username=?", (session["username"],))
@@ -391,7 +328,7 @@ def view_results():
 
     username = session["username"]
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
         SELECT subject, score, date
@@ -416,7 +353,7 @@ def start_exam():
     # Log all faces detected at the start of the exam
     log_faces_during_exam(session_id=session["username"])
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
 
     # Get subject name
@@ -486,7 +423,7 @@ def monitor_exam():
             session['last_camera_hidden_ts'] = now
             # Log event in camera_events table
             try:
-                conn = sqlite3.connect(get_db_path())
+                conn = get_db_connection()
                 cur = conn.cursor()
                 cur.execute("INSERT INTO camera_events (username, event_type, event_time, exam_subject) VALUES (?, ?, datetime('now'), ?)",
                     (session.get('username', 'unknown'), 'camera_hidden', session.get('current_subject', 'unknown')))
@@ -615,7 +552,7 @@ def submit_exam():
     if terminated:
         score = 0  # Or handle differently
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
 
     for qid in request.form:
@@ -657,7 +594,7 @@ def admin_login():
 def admin_dashboard():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT id, name, enabled FROM subjects")
     subjects = cur.fetchall()
@@ -694,7 +631,7 @@ def admin_dashboard():
 def toggle_subject(subject_id):
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("UPDATE subjects SET enabled = NOT enabled WHERE id = ?", (subject_id,))
     conn.commit()
@@ -707,7 +644,7 @@ def delete_subject():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     subject_id = request.form["subject_id"]
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("DELETE FROM subjects WHERE id=?", (subject_id,))
     cur.execute("DELETE FROM questions WHERE subject_id=?", (subject_id,))  # Also delete related questions
@@ -721,7 +658,7 @@ def delete_question():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     question_id = request.form["question_id"]
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("DELETE FROM questions WHERE id=?", (question_id,))
     conn.commit()
@@ -749,7 +686,7 @@ def add_subjects():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
 
     if request.method == "POST":
@@ -768,7 +705,7 @@ def add_questions():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM subjects")
     subjects = cur.fetchall()
@@ -799,7 +736,7 @@ def admin_results():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
 
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
         SELECT username, subject, score, date, id, cheating_count, terminated, looking_away_count, tab_switch_count, camera_hidden_count, hand_cover_count, no_blink_count
@@ -816,7 +753,7 @@ def delete_result():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     result_id = request.form["result_id"]
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("DELETE FROM results WHERE id=?", (result_id,))
     conn.commit()
@@ -833,7 +770,7 @@ def admin_logout():
 def admin_camera_events():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT username, event_type, event_time, exam_subject FROM camera_events ORDER BY event_time DESC LIMIT 200")
     events = cur.fetchall()
@@ -860,7 +797,7 @@ def manage_materials():
             file.save(file_path)
             
             # Save to database
-            conn = sqlite3.connect(get_db_path())
+            conn = get_db_connection()
             cur = conn.cursor()
             cur.execute("INSERT INTO materials (title, description, filename, filepath, upload_date) VALUES (?, ?, ?, ?, ?)", 
                        (title, description, filename, f"static/materials/{filename}", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
@@ -870,7 +807,7 @@ def manage_materials():
         return redirect(url_for("manage_materials"))
     
     # GET request - show all materials
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT id, title, description, filename, filepath, upload_date, enabled FROM materials ORDER BY upload_date DESC")
     materials = cur.fetchall()
@@ -885,7 +822,7 @@ def delete_material():
         return redirect(url_for("admin_login"))
     
     material_id = request.form["material_id"]
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     
     # Get filename before deleting
@@ -912,7 +849,7 @@ def toggle_material():
         return redirect(url_for("admin_login"))
     
     material_id = request.form["material_id"]
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     
     # Get current enabled status and toggle it
@@ -933,7 +870,7 @@ def materials():
     if not session.get("username"):
         return redirect(url_for("login"))
     
-    conn = sqlite3.connect(get_db_path())
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT id, title, description, filename, filepath, upload_date FROM materials WHERE enabled = 1 ORDER BY upload_date DESC")
     materials = cur.fetchall()

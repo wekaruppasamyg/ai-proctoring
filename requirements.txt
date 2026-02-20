@@ -8,3 +8,5 @@ attrs==22.2.0
 flatbuffers>=25.9
 matplotlib>=3.7.1
 Pillow>=9.5.0
+psycopg2-binary==2.9.7
+python_version == "3.11"
