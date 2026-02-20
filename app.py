@@ -11,6 +11,7 @@ import numpy as np
 from time import time
 import threading
 from werkzeug.utils import secure_filename
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 # ================= APP CONFIG =================
 app = Flask(__name__)
@@ -46,8 +47,24 @@ def mjpeg_stream(username):
 
 # ================= DATABASE INIT =================
 
+_db_initialized = False
+_db_init_lock = threading.Lock()
+
+
+def _normalize_database_url(db_url: str) -> str:
+    if db_url.startswith("postgres://"):
+        db_url = "postgresql://" + db_url[len("postgres://"):]
+
+    parsed = urlparse(db_url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.setdefault("sslmode", os.environ.get("PGSSLMODE", "require"))
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
 def get_db_connection():
-    return psycopg2.connect(os.environ['DATABASE_URL'])
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is not set")
+    return psycopg2.connect(_normalize_database_url(db_url))
 
 def init_db():
     conn = get_db_connection()
@@ -76,9 +93,13 @@ def init_db():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS subjects (
         id SERIAL PRIMARY KEY,
-        name TEXT
+        name TEXT,
+        enabled BOOLEAN DEFAULT TRUE
     )
     """)
+
+    # Backward compatible schema updates
+    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS questions (
@@ -99,13 +120,20 @@ def init_db():
         username TEXT,
         subject TEXT,
         score INTEGER,
-        date TEXT,
+        date TIMESTAMPTZ,
         cheating_count INTEGER DEFAULT 0,
         terminated BOOLEAN DEFAULT FALSE,
         looking_away_count INTEGER DEFAULT 0,
-        tab_switch_count INTEGER DEFAULT 0
+        tab_switch_count INTEGER DEFAULT 0,
+        camera_hidden_count INTEGER DEFAULT 0,
+        hand_cover_count INTEGER DEFAULT 0,
+        no_blink_count INTEGER DEFAULT 0
     )
     """)
+
+    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS camera_hidden_count INTEGER DEFAULT 0")
+    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS hand_cover_count INTEGER DEFAULT 0")
+    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS no_blink_count INTEGER DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS materials (
@@ -115,13 +143,29 @@ def init_db():
         filename TEXT NOT NULL,
         filepath TEXT NOT NULL,
         subject_id INTEGER,
-        upload_date TEXT,
+        upload_date TIMESTAMPTZ,
         enabled BOOLEAN DEFAULT TRUE
     )
     """)
 
     conn.commit()
     conn.close()
+
+
+def ensure_db_initialized():
+    global _db_initialized
+    if _db_initialized:
+        return
+    with _db_init_lock:
+        if _db_initialized:
+            return
+        init_db()
+        _db_initialized = True
+
+
+@app.before_request
+def _ensure_db_initialized_before_request():
+    ensure_db_initialized()
 
 # ================= HELPERS =================
 def generate_username(name):
@@ -218,7 +262,7 @@ def register():
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO users(name,email,username,password) VALUES(?,?,?,?)",
+            "INSERT INTO users(name,email,username,password) VALUES(%s,%s,%s,%s)",
             (name, email, username, password)
         )
         conn.commit()
@@ -283,7 +327,7 @@ def login_check():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "SELECT * FROM users WHERE username=? AND password=?",
+        "SELECT * FROM users WHERE username=%s AND password=%s",
         (u, p)
     )
     user = cur.fetchone()
@@ -310,7 +354,7 @@ def student_dashboard():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT name,email,username FROM users WHERE username=?", (session["username"],))
+    cur.execute("SELECT name,email,username FROM users WHERE username=%s", (session["username"],))
     student = cur.fetchone()
 
     cur.execute("SELECT id, name, enabled FROM subjects")
@@ -330,12 +374,15 @@ def view_results():
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT subject, score, date
         FROM results
-        WHERE username=?
+        WHERE username=%s
         ORDER BY date DESC
-    """, (username,))
+        """,
+        (username,),
+    )
     results = cur.fetchall()
     conn.close()
 
@@ -357,7 +404,7 @@ def start_exam():
     cur = conn.cursor()
 
     # Get subject name
-    cur.execute("SELECT name, enabled FROM subjects WHERE id=?", (subject_id,))
+    cur.execute("SELECT name, enabled FROM subjects WHERE id=%s", (subject_id,))
     subject_row = cur.fetchone()
     if not subject_row:
         return "Subject not found"
@@ -366,11 +413,14 @@ def start_exam():
         return "This subject is currently locked. Please contact admin."
 
     # Get questions
-    cur.execute("""
+    cur.execute(
+        """
         SELECT id, question, opt1, opt2, opt3, opt4
         FROM questions
-        WHERE subject_id=?
-    """, (subject_id,))
+        WHERE subject_id=%s
+        """,
+        (subject_id,),
+    )
     questions = cur.fetchall()
     conn.close()
 
@@ -425,8 +475,14 @@ def monitor_exam():
             try:
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute("INSERT INTO camera_events (username, event_type, event_time, exam_subject) VALUES (?, ?, datetime('now'), ?)",
-                    (session.get('username', 'unknown'), 'camera_hidden', session.get('current_subject', 'unknown')))
+                cur.execute(
+                    "INSERT INTO camera_events (username, event_type, event_time, exam_subject) VALUES (%s, %s, NOW(), %s)",
+                    (
+                        session.get("username", "unknown"),
+                        "camera_hidden",
+                        session.get("current_subject", "unknown"),
+                    ),
+                )
                 conn.commit()
                 conn.close()
             except Exception as e:
@@ -559,16 +615,34 @@ def submit_exam():
         if qid == "subject":
             continue
 
-        cur.execute("SELECT correct FROM questions WHERE id=?", (qid,))
+        cur.execute("SELECT correct FROM questions WHERE id=%s", (qid,))
         correct = cur.fetchone()[0]
 
         if int(request.form[qid]) == correct:
             score += 1
 
-    cur.execute("""
-        INSERT INTO results(username,subject,score,date,cheating_count,terminated,looking_away_count,tab_switch_count,camera_hidden_count,hand_cover_count,no_blink_count)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)
-    """, (username, subject, score, datetime.now(), cheating_count, terminated, looking_away_count, tab_switch_count, camera_hidden_count, hand_cover_count, no_blink_count))
+    cur.execute(
+        """
+        INSERT INTO results(
+            username,subject,score,date,cheating_count,terminated,
+            looking_away_count,tab_switch_count,camera_hidden_count,hand_cover_count,no_blink_count
+        )
+        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """,
+        (
+            username,
+            subject,
+            score,
+            datetime.now(),
+            cheating_count,
+            terminated,
+            looking_away_count,
+            tab_switch_count,
+            camera_hidden_count,
+            hand_cover_count,
+            no_blink_count,
+        ),
+    )
 
     conn.commit()
     conn.close()
@@ -602,7 +676,10 @@ def admin_dashboard():
     subject_data = []
     for subject in subjects:
         subject_id, subject_name, enabled = subject
-        cur.execute("SELECT id, question, opt1, opt2, opt3, opt4, correct FROM questions WHERE subject_id=?", (subject_id,))
+        cur.execute(
+            "SELECT id, question, opt1, opt2, opt3, opt4, correct FROM questions WHERE subject_id=%s",
+            (subject_id,),
+        )
         questions = cur.fetchall()
         # Prepare questions with correct answer text
         question_list = []
@@ -633,7 +710,7 @@ def toggle_subject(subject_id):
         return redirect(url_for("admin_login"))
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE subjects SET enabled = NOT enabled WHERE id = ?", (subject_id,))
+    cur.execute("UPDATE subjects SET enabled = NOT enabled WHERE id = %s", (subject_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("admin_dashboard"))
@@ -646,8 +723,8 @@ def delete_subject():
     subject_id = request.form["subject_id"]
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM subjects WHERE id=?", (subject_id,))
-    cur.execute("DELETE FROM questions WHERE subject_id=?", (subject_id,))  # Also delete related questions
+    cur.execute("DELETE FROM subjects WHERE id=%s", (subject_id,))
+    cur.execute("DELETE FROM questions WHERE subject_id=%s", (subject_id,))  # Also delete related questions
     conn.commit()
     conn.close()
     return redirect(url_for("admin_dashboard"))
@@ -660,7 +737,7 @@ def delete_question():
     question_id = request.form["question_id"]
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM questions WHERE id=?", (question_id,))
+    cur.execute("DELETE FROM questions WHERE id=%s", (question_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("admin_dashboard"))
@@ -690,7 +767,7 @@ def add_subjects():
     cur = conn.cursor()
 
     if request.method == "POST":
-        cur.execute("INSERT INTO subjects(name) VALUES(?)", (request.form["name"],))
+        cur.execute("INSERT INTO subjects(name) VALUES(%s)", (request.form["name"],))
         conn.commit()
 
     cur.execute("SELECT * FROM subjects")
@@ -711,10 +788,12 @@ def add_questions():
     subjects = cur.fetchall()
 
     if request.method == "POST":
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO questions(subject_id,question,opt1,opt2,opt3,opt4,correct)
-            VALUES(?,?,?,?,?,?,?)
-        """, (
+            VALUES(%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (
             request.form["subject_id"],
             request.form["question"],
             request.form["opt1"],
@@ -722,7 +801,8 @@ def add_questions():
             request.form["opt3"],
             request.form["opt4"],
             request.form["correct"]
-        ))
+            ),
+        )
         conn.commit()
 
     cur.execute("SELECT * FROM questions")
@@ -755,7 +835,7 @@ def delete_result():
     result_id = request.form["result_id"]
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM results WHERE id=?", (result_id,))
+    cur.execute("DELETE FROM results WHERE id=%s", (result_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("admin_results"))
@@ -799,8 +879,10 @@ def manage_materials():
             # Save to database
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("INSERT INTO materials (title, description, filename, filepath, upload_date) VALUES (?, ?, ?, ?, ?)", 
-                       (title, description, filename, f"static/materials/{filename}", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            cur.execute(
+                "INSERT INTO materials (title, description, filename, filepath, upload_date) VALUES (%s, %s, %s, %s, %s)",
+                (title, description, filename, f"static/materials/{filename}", datetime.now()),
+            )
             conn.commit()
             conn.close()
         
@@ -826,7 +908,7 @@ def delete_material():
     cur = conn.cursor()
     
     # Get filename before deleting
-    cur.execute("SELECT filename FROM materials WHERE id=?", (material_id,))
+    cur.execute("SELECT filename FROM materials WHERE id=%s", (material_id,))
     result = cur.fetchone()
     if result:
         filename = result[0]
@@ -836,7 +918,7 @@ def delete_material():
             os.remove(file_path)
         
         # Delete from database
-        cur.execute("DELETE FROM materials WHERE id=?", (material_id,))
+        cur.execute("DELETE FROM materials WHERE id=%s", (material_id,))
         conn.commit()
     
     conn.close()
@@ -853,12 +935,12 @@ def toggle_material():
     cur = conn.cursor()
     
     # Get current enabled status and toggle it
-    cur.execute("SELECT enabled FROM materials WHERE id=?", (material_id,))
+    cur.execute("SELECT enabled FROM materials WHERE id=%s", (material_id,))
     result = cur.fetchone()
     if result:
         current_status = result[0]
-        new_status = 0 if current_status == 1 else 1
-        cur.execute("UPDATE materials SET enabled=? WHERE id=?", (new_status, material_id))
+        new_status = not bool(current_status)
+        cur.execute("UPDATE materials SET enabled=%s WHERE id=%s", (new_status, material_id))
         conn.commit()
     
     conn.close()
@@ -868,11 +950,13 @@ def toggle_material():
 @app.route("/materials")
 def materials():
     if not session.get("username"):
-        return redirect(url_for("login"))
+        return redirect(url_for("student_login"))
     
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, title, description, filename, filepath, upload_date FROM materials WHERE enabled = 1 ORDER BY upload_date DESC")
+    cur.execute(
+        "SELECT id, title, description, filename, filepath, upload_date FROM materials WHERE enabled = TRUE ORDER BY upload_date DESC"
+    )
     materials = cur.fetchall()
     conn.close()
     
