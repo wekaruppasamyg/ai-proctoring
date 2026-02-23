@@ -118,24 +118,6 @@ header{
     display:block;
 }
 
-.video-wrapper{
-    position:relative;
-    display:inline-block;
-    width:100%;
-    border-radius:16px;
-    overflow:hidden;
-}
-
-#overlay-canvas{
-    position:absolute;
-    top:0;
-    left:0;
-    width:100%;
-    height:100%;
-    pointer-events:none;
-    border-radius:16px;
-}
-
 /* ===== QUIZ CARD ===== */
 .quiz-card{
     background:rgba(2,6,23,0.75);
@@ -288,10 +270,7 @@ header{
         <!-- CAMERA -->
         <div class="camera-card">
             <h3>Live Proctoring</h3>
-        <div class="video-wrapper">
-            <video id="video" autoplay muted></video>
-            <canvas id="overlay-canvas"></canvas>
-        </div>
+        <video id="video" autoplay muted></video>
 
 <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
 
@@ -575,38 +554,9 @@ faceMesh.setOptions({
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5
 });
-const overlayCanvas = document.getElementById('overlay-canvas');
-const octx = overlayCanvas.getContext('2d');
-
-function drawDot(x, y, color, radius) {
-    octx.shadowBlur = 10;
-    octx.shadowColor = color;
-    octx.fillStyle = color;
-    octx.beginPath();
-    octx.arc(x, y, radius, 0, 2 * Math.PI);
-    octx.fill();
-    octx.shadowBlur = 0;
-}
-
-function drawFaceLandmarks(lm, w, h) {
-    octx.clearRect(0, 0, w, h);
-    // Left eye  (iris center — landmark 468)
-    if (lm[468]) drawDot(lm[468].x * w, lm[468].y * h, '#00e5ff', 6);
-    // Right eye (iris center — landmark 473)
-    if (lm[473]) drawDot(lm[473].x * w, lm[473].y * h, '#00e5ff', 6);
-    // Nose tip  (landmark 1)
-    if (lm[1])   drawDot(lm[1].x   * w, lm[1].y   * h, '#ff3333', 6);
-}
-
 faceMesh.onResults(results => {
-    // Sync overlay canvas size to displayed video size
-    overlayCanvas.width  = videoElement.clientWidth  || videoElement.videoWidth  || 320;
-    overlayCanvas.height = videoElement.clientHeight || videoElement.videoHeight || 240;
-    const W = overlayCanvas.width, H = overlayCanvas.height;
-
     if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
-        drawFaceLandmarks(landmarks, W, H);
 
         // Looking away
         if (isLookingAway(landmarks)) {
@@ -787,7 +737,6 @@ faceMesh.onResults(results => {
         }
 
     } else {
-        octx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         errorMessage.style.display = 'none';
         lookingAwayFrames = 0;
         eyeTrackerMessage.style.display = 'none';

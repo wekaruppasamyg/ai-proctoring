@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -243,43 +243,6 @@ tr:hover td{
     box-shadow:0 8px 20px rgba(255,0,0,0.5);
 }
 
-/* ===== EMAIL BUTTON ===== */
-.send-email-btn{
-    padding:8px 16px;
-    border-radius:20px;
-    border:none;
-    background:#007bff;
-    color:#fff;
-    cursor:pointer;
-    font-size:13px;
-    transition:0.3s;
-    box-shadow:0 5px 15px rgba(0,123,255,0.3);
-}
-
-.send-email-btn:hover{
-    transform:scale(1.05);
-    box-shadow:0 8px 20px rgba(0,123,255,0.5);
-}
-
-.send-all-btn{
-    padding:12px 24px;
-    border-radius:25px;
-    border:none;
-    background:#28a745;
-    color:#fff;
-    cursor:pointer;
-    font-size:14px;
-    font-weight:600;
-    transition:0.3s;
-    box-shadow:0 5px 15px rgba(40,167,69,0.3);
-    margin-bottom:20px;
-}
-
-.send-all-btn:hover{
-    transform:scale(1.05);
-    box-shadow:0 8px 20px rgba(40,167,69,0.5);
-}
-
 /* ===== EMPTY ===== */
 .empty{
     text-align:center;
@@ -319,13 +282,6 @@ tr:hover td{
 </header>
 
 <div class="container">
-    <div class="page-title"><i class="fas fa-chart-bar"></i> Student Exam Results</div>
-
-    {% if results %}
-    <button class="send-all-btn" onclick="sendAllResultsEmails()">
-        <i class="fas fa-envelope"></i> Send All Result Emails
-    </button>
-    {% endif %}
 
     <!-- ===== SUBJECT FILTER ===== -->
     <div class="filter">
@@ -374,15 +330,10 @@ tr:hover td{
                         <td>{{ r[11] }}</td>
                         <td>{{ "Yes" if r[6] else "No" }}</td>
                         <td>
-                            <div style="display:flex; gap:8px;">
-                                <button class="send-email-btn" onclick="sendResultEmail({{ r[4] }})">
-                                    <i class="fas fa-envelope"></i> Email
-                                </button>
-                                <form method="POST" action="/delete-result" style="margin:0;">
-                                    <input type="hidden" name="result_id" value="{{ r[4] }}">
-                                    <button class="delete-btn" type="submit"><i class="fas fa-trash"></i> Delete</button>
-                                </form>
-                            </div>
+                            <form method="POST" action="/delete-result" style="margin:0;">
+                                <input type="hidden" name="result_id" value="{{ r[4] }}">
+                                <button class="delete-btn" type="submit"><i class="fas fa-trash"></i> Delete</button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}
@@ -412,85 +363,6 @@ function filterResults(subject, btn){
     });
 }
 
-function sendResultEmail(resultId){
-    if(confirm('Send result email to this student?')){
-        fetch('/send-result-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result_id: resultId })
-        })
-        .then(async (r) => {
-            const text = await r.text();
-            if(!text){
-                throw new Error('Empty response from server (HTTP ' + r.status + '). Timeout or proxy error.');
-            }
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                throw new Error('Non-JSON response from server: ' + text.slice(0, 200));
-            }
-        })
-        .then(data => {
-            if(data.status === 'sent' || data.status === 'queued'){
-                alert('✅ Email queued for ' + data.email + '\n\nDelivery takes 1-2 minutes.\nCheck Inbox + Spam + Promotions folders.');
-            } else if(data.status === 'no_email'){
-                alert('❌ This student has no email address on record.');
-            } else if(data.status === 'error'){
-                alert('❌ Error: ' + (data.message || 'Failed to send email'));
-            } else {
-                alert('❌ Unexpected response. Check Render logs.');
-            }
-        })
-        .catch(e => alert('Error: ' + e));
-    }
-}
-
-function sendAllResultsEmails(){
-    if(confirm('Send result emails to ALL students?\n\nThis will send emails to all students who have taken exams.')){
-        const btn = event.target;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-        
-        fetch('/send-all-results-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        })
-        .then(async (r) => {
-            const text = await r.text();
-            if(!text){
-                throw new Error('Empty response from server (HTTP ' + r.status + '). Timeout or proxy error.');
-            }
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                throw new Error('Non-JSON response from server: ' + text.slice(0, 200));
-            }
-        })
-        .then(data => {
-            if(data.status === 'queued'){
-                alert('✅ Queued ' + data.count + ' result emails.\n\nDelivery may take 1-2 minutes. Check Spam/Promotions.');
-            } else if(data.status === 'sent_all'){
-                if(typeof data.failed === 'number' && data.failed > 0){
-                    alert('⚠️ Sent ' + data.count + ' emails. Failed: ' + data.failed + '.\n\nCheck Render logs and Spam/Promotions.');
-                } else {
-                    alert('✅ Sent ' + data.count + ' result emails to students!');
-                }
-            } else if(data.status === 'error'){
-                alert('❌ Error: ' + (data.message || 'Failed to send emails'));
-            } else {
-                alert('❌ Failed to send emails');
-            }
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-envelope"></i> Send All Result Emails';
-        })
-        .catch(e => {
-            alert('Error: ' + e);
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-envelope"></i> Send All Result Emails';
-        });
-    }
-}
 </script>
 
 </body>
