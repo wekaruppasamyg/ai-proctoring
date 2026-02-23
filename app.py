@@ -1327,10 +1327,10 @@ def send_result_email():
         if not EMAIL_ENABLED:
             return jsonify({
                 "status": "error", 
-                "message": "Email not configured on server. Add MAIL_USERNAME and MAIL_PASSWORD environment variables on Render."
+                "message": "Email not configured. Add MAIL_USERNAME and MAIL_PASSWORD in Render environment."
             })
         
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True) or {}
         result_id = data.get("result_id")
         
         if not result_id:
@@ -1367,7 +1367,7 @@ def send_result_email():
         # Get total questions for subject
         cur.execute("SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)", (subject,))
         total_q = cur.fetchone()
-        total_questions = total_q[0] if total_q else 20
+        total_questions = (total_q[0] if total_q else 0) or 20
         
         conn.close()
         
@@ -1380,26 +1380,15 @@ def send_result_email():
             'camera_hidden': cam_hidden or 0
         }
         
-        # Send synchronously so UI reflects real success/failure.
-        ok = send_exam_completion_email(
-            username,
-            student_email,
-            subject,
-            score,
-            total_questions,
-            violations,
-            wait_for_result=True,
-        )
-
-        if not ok:
-            return jsonify({
-                "status": "error",
-                "message": "SMTP send failed. Check Render logs and the recipient Spam/Promotions folder.",
-            })
-
-        return jsonify({"status": "sent", "email": student_email})
+        # Always send in background thread — never block the request thread with SMTP.
+        send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
+        
+        return jsonify({"status": "queued", "email": student_email})
     
     except Exception as e:
+        print(f"Error in send_result_email: {str(e)}")
+        import traceback; traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)})
         print(f"Error in send_result_email: {str(e)}")
         return jsonify({"status": "error", "message": str(e)})
 

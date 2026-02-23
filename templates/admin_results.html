@@ -431,14 +431,14 @@ function sendResultEmail(resultId){
             }
         })
         .then(data => {
-            if(data.status === 'sent'){
-                alert('✅ Result email sent to ' + data.email);
+            if(data.status === 'sent' || data.status === 'queued'){
+                alert('✅ Email queued for ' + data.email + '\n\nDelivery takes 1-2 minutes.\nCheck Inbox + Spam + Promotions folders.');
             } else if(data.status === 'no_email'){
-                alert('❌ Student email not found');
+                alert('❌ This student has no email address on record.');
             } else if(data.status === 'error'){
                 alert('❌ Error: ' + (data.message || 'Failed to send email'));
             } else {
-                alert('❌ Failed to send email');
+                alert('❌ Unexpected response. Check Render logs.');
             }
         })
         .catch(e => alert('Error: ' + e));
