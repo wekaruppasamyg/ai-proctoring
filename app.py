@@ -69,7 +69,8 @@ def mjpeg_stream(username):
 def send_email(recipient, subject, body, html_body=None):
     """Send email to recipient (graceful if email not configured)"""
     if not EMAIL_ENABLED or not mail:
-        print(f"⏭️ Email not configured - skipping: {subject}")
+        msg = f"⏭️ Email NOT CONFIGURED - Cannot send '{subject}' to {recipient}"
+        print(msg)
         return False
     
     if not recipient or '@' not in str(recipient):
@@ -79,11 +80,16 @@ def send_email(recipient, subject, body, html_body=None):
     # Send email in background thread to prevent timeout
     def _send_email_async():
         try:
+            print(f"📧 Attempting to send email to {recipient} via {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']}")
             msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
             mail.send(msg)
-            print(f"✉️ Email sent to {recipient}: {subject}")
+            print(f"✅ Email SUCCESSFULLY sent to {recipient}: {subject}")
+            return True
         except Exception as e:
-            print(f"❌ Email send error to {recipient}: {e}")
+            print(f"❌ Email FAILED to send to {recipient}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     # Start background thread for email sending
     email_thread = threading.Thread(target=_send_email_async, daemon=True)
@@ -1562,6 +1568,42 @@ def materials():
 def logout():
     session.clear()
     return redirect(url_for("student_login"))
+
+# ================= EMAIL DIAGNOSTICS =================
+@app.route("/check-email-config")
+def check_email_config():
+    """Check email configuration and SMTP connectivity"""
+    config_status = {
+        "email_enabled": EMAIL_ENABLED,
+        "mail_server": app.config.get('MAIL_SERVER'),
+        "mail_port": app.config.get('MAIL_PORT'),
+        "mail_use_tls": app.config.get('MAIL_USE_TLS'),
+        "mail_username_set": bool(app.config.get('MAIL_USERNAME')),
+        "mail_password_set": bool(app.config.get('MAIL_PASSWORD')),
+        "username_preview": (app.config.get('MAIL_USERNAME', '')[:5] + '...') if app.config.get('MAIL_USERNAME') else "NOT SET",
+    }
+    
+    # Try to test email if configured
+    if EMAIL_ENABLED and mail:
+        try:
+            config_status["status"] = "✅ Email is properly configured"
+            config_status["message"] = "You can now send emails"
+        except Exception as e:
+            config_status["status"] = "⚠️ Email config found but connection test failed"
+            config_status["error"] = str(e)
+    else:
+        config_status["status"] = "❌ Email NOT configured"
+        config_status["message"] = "Please add MAIL_USERNAME and MAIL_PASSWORD to Render environment variables"
+        config_status["next_steps"] = [
+            "Go to https://dashboard.render.com",
+            "Select your ai-proctoring service",
+            "Click Environment tab",
+            "Add MAIL_USERNAME = your-email@gmail.com",
+            "Add MAIL_PASSWORD = 16-char Gmail app password",
+            "Click Save (Render will auto-redeploy)"
+        ]
+    
+    return jsonify(config_status)
 
 # ================= RUN APP =================
 if __name__ == "__main__":
