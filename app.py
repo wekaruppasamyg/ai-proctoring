@@ -23,13 +23,13 @@ os.makedirs("faces", exist_ok=True)
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() in ['true', '1', 'yes']
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'wekaruppasamyg23@gmail.com')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'nuic knrf fkch poco')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@aiproctoring.com')
 app.config['MAIL_SUPPRESS_SEND'] = False
 
-# Check if email is configured
-EMAIL_ENABLED = bool(os.environ.get('MAIL_USERNAME') and os.environ.get('MAIL_PASSWORD'))
+# Check if email is configured (requires both username and password)
+EMAIL_ENABLED = bool(app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD'])
 
 try:
     mail = Mail(app)
@@ -1292,6 +1292,13 @@ def send_result_email():
         if not session.get("admin"):
             return jsonify({"status": "unauthorized"})
         
+        # Check if email is configured
+        if not EMAIL_ENABLED:
+            return jsonify({
+                "status": "error", 
+                "message": "Email not configured on server. Add MAIL_USERNAME and MAIL_PASSWORD environment variables on Render."
+            })
+        
         data = request.get_json()
         result_id = data.get("result_id")
         
@@ -1357,6 +1364,13 @@ def send_all_results_email():
     try:
         if not session.get("admin"):
             return jsonify({"status": "unauthorized"})
+        
+        # Check if email is configured
+        if not EMAIL_ENABLED:
+            return jsonify({
+                "status": "error", 
+                "message": "Email not configured on server. Add MAIL_USERNAME and MAIL_PASSWORD environment variables on Render."
+            })
         
         conn = get_db_connection()
         cur = conn.cursor()

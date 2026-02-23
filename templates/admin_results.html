@@ -425,6 +425,8 @@ function sendResultEmail(resultId){
                 alert('✅ Result email sent to ' + data.email);
             } else if(data.status === 'no_email'){
                 alert('❌ Student email not found');
+            } else if(data.status === 'error'){
+                alert('❌ Error: ' + (data.message || 'Failed to send email'));
             } else {
                 alert('❌ Failed to send email');
             }
@@ -448,6 +450,8 @@ function sendAllResultsEmails(){
         .then(data => {
             if(data.status === 'sent_all'){
                 alert('✅ Sent ' + data.count + ' result emails to students!');
+            } else if(data.status === 'error'){
+                alert('❌ Error: ' + (data.message || 'Failed to send emails'));
             } else {
                 alert('❌ Failed to send emails');
             }
