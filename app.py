@@ -1234,13 +1234,14 @@ def delete_coding_result():
     conn.close()
     return redirect(url_for("admin_coding_results"))
 
-@app.route('/upload-exam-file', methods=['POST'])
-def upload_exam_file():
-    file = request.files.get('student_file')
-    if file:
+@app.route('/upload-csv-exam', methods=['POST'])
+def upload_csv_exam():
+    file = request.files.get('csv_file')
+    if file and file.filename.endswith('.csv'):
         file.save('uploads/' + file.filename)  # Make sure 'uploads/' exists
-        return redirect('/')  # Or redirect to the exam page
-    return "No file uploaded", 400
+        # Optionally, process the CSV here
+        return redirect('/coding-exam')  # Or wherever you want to redirect after upload
+    return "No file uploaded or wrong file type", 400
 # ================= RUN APP =================
 if __name__ == "__main__":
     init_db()

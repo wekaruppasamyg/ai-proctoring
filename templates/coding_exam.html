@@ -562,7 +562,8 @@ document.addEventListener("keydown", e => {
 </body>
 </html>
 
-<form method="POST" action="/upload-exam-file" enctype="multipart/form-data">
-    <input type="file" name="student_file" required>
-    <button type="submit">Upload Your Work</button>
+<form method="POST" action="/upload-csv-exam" enctype="multipart/form-data">
+    <label for="csv_file">Upload your CSV file:</label>
+    <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
+    <button type="submit">Upload CSV</button>
 </form>
