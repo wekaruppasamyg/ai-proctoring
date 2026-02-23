@@ -449,7 +449,11 @@ function sendAllResultsEmails(){
         .then(r => r.json())
         .then(data => {
             if(data.status === 'sent_all'){
-                alert('✅ Sent ' + data.count + ' result emails to students!');
+                if(typeof data.failed === 'number' && data.failed > 0){
+                    alert('⚠️ Sent ' + data.count + ' emails. Failed: ' + data.failed + '.\n\nCheck Render logs and Spam/Promotions.');
+                } else {
+                    alert('✅ Sent ' + data.count + ' result emails to students!');
+                }
             } else if(data.status === 'error'){
                 alert('❌ Error: ' + (data.message || 'Failed to send emails'));
             } else {

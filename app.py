@@ -24,8 +24,12 @@ app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() in ['true', '1', 'yes']
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@aiproctoring.com')
+_raw_mail_password = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_PASSWORD'] = _raw_mail_password.replace(' ', '') if _raw_mail_password else None
+
+# Gmail/SMTP providers commonly reject spoofed From addresses.
+# If MAIL_DEFAULT_SENDER is not set, default to the authenticated mailbox.
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or app.config['MAIL_USERNAME'] or 'noreply@aiproctoring.com'
 app.config['MAIL_SUPPRESS_SEND'] = False
 
 # Check if email is configured (requires both username and password)
@@ -66,8 +70,12 @@ def mjpeg_stream(username):
 
 # ================= EMAIL FUNCTIONS =================
 
-def send_email(recipient, subject, body, html_body=None):
-    """Send email to recipient (graceful if email not configured)"""
+def send_email(recipient, subject, body, html_body=None, wait_for_result=False):
+    """Send email to recipient.
+
+    If wait_for_result=True, sends synchronously and returns True/False based on actual SMTP send.
+    If wait_for_result=False, sends in a background thread and returns True if queued.
+    """
     if not EMAIL_ENABLED or not mail:
         msg = f"⏭️ Email NOT CONFIGURED - Cannot send '{subject}' to {recipient}"
         print(msg)
@@ -77,11 +85,11 @@ def send_email(recipient, subject, body, html_body=None):
         print(f"⚠️ Invalid email address: {recipient}")
         return False
     
-    # Send email in background thread to prevent timeout
-    def _send_email_async():
+    print(f"📧 Attempting to send email to {recipient} via {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']} (sender: {app.config.get('MAIL_DEFAULT_SENDER')})")
+    msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
+
+    if wait_for_result:
         try:
-            print(f"📧 Attempting to send email to {recipient} via {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']}")
-            msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
             mail.send(msg)
             print(f"✅ Email SUCCESSFULLY sent to {recipient}: {subject}")
             return True
@@ -90,13 +98,22 @@ def send_email(recipient, subject, body, html_body=None):
             import traceback
             traceback.print_exc()
             return False
-    
-    # Start background thread for email sending
+
+    # Send email in background thread to prevent request latency
+    def _send_email_async():
+        try:
+            mail.send(msg)
+            print(f"✅ Email SUCCESSFULLY sent to {recipient}: {subject}")
+        except Exception as e:
+            print(f"❌ Email FAILED to send to {recipient}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
     email_thread = threading.Thread(target=_send_email_async, daemon=True)
     email_thread.start()
     return True
 
-def send_exam_start_email(username, email, subject_name, duration_minutes):
+def send_exam_start_email(username, email, subject_name, duration_minutes, wait_for_result=False):
     """Send email when student starts exam"""
     subject = f"Exam Started: {subject_name}"
     body = f"""
@@ -151,9 +168,9 @@ AI Proctoring System
   </body>
 </html>
 """
-    return send_email(email, subject, body, html_body)
+    return send_email(email, subject, body, html_body, wait_for_result=wait_for_result)
 
-def send_exam_completion_email(username, email, subject_name, score, total_questions, violations):
+def send_exam_completion_email(username, email, subject_name, score, total_questions, violations, wait_for_result=False):
     """Send email when exam is completed with score"""
     percentage = (score / total_questions * 100) if total_questions > 0 else 0
     
@@ -236,7 +253,7 @@ AI Proctoring System
   </body>
 </html>
 """
-    return send_email(email, subject, body, html_body)
+    return send_email(email, subject, body, html_body, wait_for_result=wait_for_result)
 
 # ================= DATABASE INIT =================
 
@@ -1070,7 +1087,8 @@ AI Proctoring System
 </html>
 """
     
-    result = send_email(test_email_addr, subject, body, html_body)
+    # For diagnostics, send synchronously so the page reflects real SMTP success/failure.
+    result = send_email(test_email_addr, subject, body, html_body, wait_for_result=True)
     
     # Return HTML status page
     status_html = f"""
@@ -1360,9 +1378,23 @@ def send_result_email():
             'camera_hidden': cam_hidden or 0
         }
         
-        # Send email in background
-        send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
-        
+        # Send synchronously so UI reflects real success/failure.
+        ok = send_exam_completion_email(
+            username,
+            student_email,
+            subject,
+            score,
+            total_questions,
+            violations,
+            wait_for_result=True,
+        )
+
+        if not ok:
+            return jsonify({
+                "status": "error",
+                "message": "SMTP send failed. Check Render logs and the recipient Spam/Promotions folder.",
+            })
+
         return jsonify({"status": "sent", "email": student_email})
     
     except Exception as e:
@@ -1400,6 +1432,7 @@ def send_all_results_email():
         conn.close()
         
         sent_count = 0
+        failed_count = 0
         for result_row in results:
             result_id, username, subject, score, email, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden = result_row
             
@@ -1420,11 +1453,21 @@ def send_all_results_email():
                 'camera_hidden': cam_hidden or 0
             }
             
-            # Send email in background
-            send_exam_completion_email(username, email, subject, score, total_questions, violations)
-            sent_count += 1
-        
-        return jsonify({"status": "sent_all", "count": sent_count})
+            ok = send_exam_completion_email(
+                username,
+                email,
+                subject,
+                score,
+                total_questions,
+                violations,
+                wait_for_result=True,
+            )
+            if ok:
+                sent_count += 1
+            else:
+                failed_count += 1
+
+        return jsonify({"status": "sent_all", "count": sent_count, "failed": failed_count})
     
     except Exception as e:
         print(f"Error in send_all_results_email: {str(e)}")
