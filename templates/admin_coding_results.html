@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coding Exam Results | Admin</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+<style>
+:root{
+    --bg:#000;
+    --surface:#111;
+    --surface2:#1a1a1a;
+    --border:#2a2a2a;
+    --primary:#8b5cf6;
+    --text:#f3f4f6;
+    --muted:#9ca3af;
+    --green:#10b981;
+    --red:#ef4444;
+    --yellow:#f59e0b;
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+body{background:var(--bg);color:var(--text);min-height:100vh;animation:fadeIn .6s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+
+/* HEADER */
+header{background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:14px 30px;box-shadow:0 8px 30px rgba(0,0,0,0.5);}
+.navbar{max-width:1400px;margin:auto;display:flex;justify-content:space-between;align-items:center;}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo img{width:36px;border-radius:50%;}
+.logo span{font-size:20px;font-weight:600;color:#fff;}
+.nav-links{display:flex;gap:10px;}
+.nav-links a{color:#fff;text-decoration:none;font-size:13px;padding:7px 14px;border-radius:18px;background:rgba(255,255,255,0.1);transition:.3s;}
+.nav-links a:hover{background:rgba(255,255,255,0.2);}
+
+/* CONTAINER */
+.container{max-width:1400px;margin:auto;padding:30px 20px;}
+
+/* PAGE TITLE */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
+.page-title{font-size:26px;font-weight:600;color:#c4b5fd;}
+.page-title i{margin-right:10px;}
+.stats-row{display:flex;gap:12px;flex-wrap:wrap;}
+.stat-pill{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:6px 16px;font-size:13px;color:var(--muted);}
+.stat-pill span{color:var(--text);font-weight:600;}
+
+/* FILTER BAR */
+.filter-bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
+.filter-input{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:8px 16px;color:var(--text);font-size:13px;font-family:'Poppins',sans-serif;outline:none;transition:.3s;min-width:200px;}
+.filter-input:focus{border-color:var(--primary);}
+.filter-btn{border:none;border-radius:20px;padding:8px 18px;font-size:13px;cursor:pointer;transition:.3s;font-family:'Poppins',sans-serif;}
+.filter-btn.active,.filter-btn:hover{background:var(--primary);color:#fff;}
+.filter-btn:not(.active){background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+
+/* TABLE CARD */
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.4);margin-bottom:30px;}
+.table-card-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;border-bottom:1px solid var(--border);
+    background:var(--surface2);
+}
+.table-card-header h3{font-size:15px;font-weight:600;}
+.lang-tag{padding:4px 12px;border-radius:12px;font-size:12px;font-weight:500;}
+.lang-python{background:rgba(250,204,21,0.15);color:#fde047;border:1px solid rgba(250,204,21,0.3);}
+.lang-html{background:rgba(249,115,22,0.15);color:#fb923c;border:1px solid rgba(249,115,22,0.3);}
+.lang-js{background:rgba(234,179,8,0.15);color:#facc15;border:1px solid rgba(234,179,8,0.3);}
+.lang-php{background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);}
+
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;min-width:900px;}
+th,td{padding:13px 16px;text-align:left;font-size:13px;border-bottom:1px solid var(--border);}
+th{background:#1e1e2e;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.6px;font-size:11px;}
+tr:hover td{background:rgba(139,92,246,0.05);}
+td:last-child{white-space:nowrap;}
+
+/* CODE PREVIEW */
+.code-preview{
+    background:#0d0d1a;border:1px solid var(--border);border-radius:8px;
+    padding:10px 12px;font-family:'JetBrains Mono','Courier New',monospace;
+    font-size:11px;color:#a3e635;max-width:300px;max-height:60px;
+    overflow:hidden;white-space:pre;cursor:pointer;transition:.3s;
+    position:relative;
+}
+.code-preview:hover{border-color:var(--primary);}
+.code-preview::after{
+    content:"Click to expand";
+    position:absolute;bottom:3px;right:6px;
+    font-size:9px;color:var(--muted);font-family:'Poppins',sans-serif;
+}
+
+/* OUTPUT PREVIEW */
+.output-preview{
+    background:#0d1a10;border:1px solid var(--border);border-radius:8px;
+    padding:8px 10px;font-family:'JetBrains Mono','Courier New',monospace;
+    font-size:11px;color:#86efac;max-width:220px;max-height:50px;
+    overflow:hidden;white-space:pre;
+}
+
+/* BADGES */
+.badge{padding:4px 10px;border-radius:12px;font-size:11px;font-weight:500;}
+.badge-ok{background:rgba(16,185,129,0.15);color:#6ee7b7;border:1px solid rgba(16,185,129,0.3);}
+.badge-warn{background:rgba(245,158,11,0.15);color:#fcd34d;border:1px solid rgba(245,158,11,0.3);}
+.badge-danger{background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);}
+.badge-terminated{background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);}
+
+/* VIOLATION CELL */
+.violation-cell{
+    display:flex;flex-direction:column;gap:2px;font-size:11px;
+}
+.v-row{display:flex;justify-content:space-between;gap:12px;color:var(--muted);}
+.v-row span:last-child{color:var(--text);font-weight:500;min-width:20px;text-align:right;}
+.v-row.v-has-val span:last-child{color:var(--red);}
+
+/* DELETE BTN */
+.del-btn{
+    padding:6px 14px;border-radius:14px;border:none;
+    background:rgba(239,68,68,0.15);color:#fca5a5;
+    border:1px solid rgba(239,68,68,0.3);
+    cursor:pointer;font-size:12px;transition:.3s;
+}
+.del-btn:hover{background:rgba(239,68,68,0.3);transform:scale(1.04);}
+
+/* EMPTY */
+.empty{text-align:center;padding:60px 20px;color:var(--muted);}
+.empty i{font-size:48px;margin-bottom:16px;opacity:.3;}
+.empty p{font-size:15px;}
+
+/* CODE MODAL */
+#code-modal{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);
+    z-index:9999;align-items:center;justify-content:center;padding:20px;
+}
+.code-modal-box{
+    background:#1a1a2e;border:1px solid rgba(139,92,246,0.3);border-radius:16px;
+    max-width:800px;width:100%;max-height:85vh;display:flex;flex-direction:column;
+    box-shadow:0 30px 80px rgba(0,0,0,0.8);
+}
+.code-modal-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 20px;border-bottom:1px solid var(--border);
+}
+.code-modal-header h3{font-size:15px;font-weight:500;}
+.close-modal{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px;}
+.close-modal:hover{color:var(--text);}
+.code-modal-body{
+    padding:20px;overflow-y:auto;
+    background:#0d0d1a;border-radius:0 0 16px 16px;
+}
+.code-modal-body pre{
+    font-family:'JetBrains Mono','Courier New',monospace;
+    font-size:13px;line-height:1.7;color:#a3e635;white-space:pre-wrap;word-break:break-all;
+}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+    .page-header{flex-direction:column;align-items:flex-start;}
+    .nav-links{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+    <div class="navbar">
+        <div class="logo">
+            <img src="/static/home.jpg" alt="AI Proctor">
+            <span>AI Proctor</span>
+        </div>
+        <div class="nav-links">
+            <a href="/admin-dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+            <a href="/admin-results"><i class="fas fa-clipboard-list"></i> MCQ Results</a>
+            <a href="/admin-live-monitor"><i class="fas fa-video"></i> Live Monitor</a>
+            <a href="/admin-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </div>
+</header>
+
+<!-- CODE MODAL -->
+<div id="code-modal">
+    <div class="code-modal-box">
+        <div class="code-modal-header">
+            <h3 id="modal-title">Code Submission</h3>
+            <button class="close-modal" onclick="closeModal()">✕</button>
+        </div>
+        <div class="code-modal-body">
+            <pre id="modal-code"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- MAIN -->
+<div class="container">
+
+    <div class="page-header">
+        <div class="page-title"><i class="fas fa-code"></i> Coding Exam Results</div>
+        <div class="stats-row">
+            <div class="stat-pill">Total: <span>{{ results | length }}</span></div>
+            {% set langs = results | map(attribute='2') | unique | list %}
+            {% for l in langs %}
+            <div class="stat-pill">{{ l }}: <span>{{ results | selectattr('2', 'equalto', l) | list | length }}</span></div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar">
+        <input class="filter-input" id="search-input" type="text" placeholder="🔍 Search username…" oninput="filterTable()">
+        <button class="filter-btn active" id="btn-all" onclick="filterLang('all', this)">All</button>
+        {% for l in langs %}
+        <button class="filter-btn" id="btn-{{ l | lower }}" onclick="filterLang('{{ l }}', this)">{{ l }}</button>
+        {% endfor %}
+    </div>
+
+    {% if results %}
+    <div class="table-card">
+        <div class="table-card-header">
+            <h3><i class="fas fa-table"></i> Submission Records</h3>
+            <span style="font-size:12px;color:var(--muted);">{{ results | length }} total submissions</span>
+        </div>
+        <div class="table-wrap">
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th><i class="fas fa-user"></i> Student</th>
+                        <th><i class="fas fa-code"></i> Language</th>
+                        <th><i class="fas fa-file-code"></i> Code Preview</th>
+                        <th><i class="fas fa-terminal"></i> Output</th>
+                        <th><i class="fas fa-calendar"></i> Submitted</th>
+                        <th><i class="fas fa-exclamation-triangle"></i> Violations</th>
+                        <th><i class="fas fa-ban"></i> Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in results %}
+                <tr data-lang="{{ r[2] }}" data-user="{{ r[1] | lower }}">
+                    <td style="color:var(--muted);">{{ loop.index }}</td>
+                    <td style="font-weight:500;">{{ r[1] }}</td>
+                    <td>
+                        {% if r[2] == 'Python' %}<span class="lang-tag lang-python">🐍 {{ r[2] }}</span>
+                        {% elif r[2] == 'HTML' %}<span class="lang-tag lang-html">🌐 {{ r[2] }}</span>
+                        {% elif r[2] == 'JavaScript' %}<span class="lang-tag lang-js">⚡ {{ r[2] }}</span>
+                        {% elif r[2] == 'PHP' %}<span class="lang-tag lang-php">🐘 {{ r[2] }}</span>
+                        {% else %}<span class="lang-tag">{{ r[2] }}</span>{% endif %}
+                    </td>
+                    <td>
+                        <div class="code-preview"
+                             data-title="{{ (r[1] ~ ' - ' ~ r[2]) | e }}"
+                             data-code="{{ (r[3] or '') | e }}"
+                             onclick="showCode(this.dataset.title, this.dataset.code)"
+                             style="cursor:pointer;">
+                            {{ r[3][:120] if r[3] else '(empty)' }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="output-preview">{{ r[4][:100] if r[4] else '(no output)' }}</div>
+                    </td>
+                    <td style="font-size:12px;color:var(--muted);">{{ r[5].strftime('%Y-%m-%d %H:%M') if r[5] else '—' }}</td>
+                    <td>
+                        <div class="violation-cell">
+                            <div class="v-row {% if r[6] and r[6] > 0 %}v-has-val{% endif %}"><span>Look Away</span><span>{{ r[6] or 0 }}</span></div>
+                            <div class="v-row {% if r[7] and r[7] > 0 %}v-has-val{% endif %}"><span>Tab Switch</span><span>{{ r[7] or 0 }}</span></div>
+                            <div class="v-row {% if r[8] and r[8] > 0 %}v-has-val{% endif %}"><span>Cam Hidden</span><span>{{ r[8] or 0 }}</span></div>
+                            <div class="v-row {% if r[9] and r[9] > 0 %}v-has-val{% endif %}"><span>Hand Cover</span><span>{{ r[9] or 0 }}</span></div>
+                            <div class="v-row {% if r[10] and r[10] > 0 %}v-has-val{% endif %}"><span>Multi-Person</span><span>{{ r[10] or 0 }}</span></div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if r[11] %}
+                            <span class="badge badge-terminated"><i class="fas fa-ban"></i> Terminated</span>
+                        {% elif (r[6] or 0) + (r[7] or 0) + (r[8] or 0) + (r[9] or 0) + (r[10] or 0) > 5 %}
+                            <span class="badge badge-warn"><i class="fas fa-exclamation"></i> Suspicious</span>
+                        {% else %}
+                            <span class="badge badge-ok"><i class="fas fa-check"></i> Clean</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="/delete-coding-result" style="margin:0;" onsubmit="return confirm('Delete this submission?');">
+                            <input type="hidden" name="result_id" value="{{ r[0] }}">
+                            <button class="del-btn" type="submit"><i class="fas fa-trash"></i> Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty">
+        <i class="fas fa-code"></i>
+        <p>No coding exam submissions yet.</p>
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+// Filter by language
+let activeLang = 'all';
+function filterLang(lang, btn) {
+    activeLang = lang;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterTable();
+}
+
+function filterTable() {
+    const search = document.getElementById('search-input').value.toLowerCase();
+    document.querySelectorAll('#results-table tbody tr').forEach(row => {
+        const matchLang = activeLang === 'all' || row.dataset.lang === activeLang;
+        const matchUser = row.dataset.user.includes(search);
+        row.style.display = (matchLang && matchUser) ? '' : 'none';
+    });
+}
+
+// Code modal
+function showCode(title, code) {
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-code').textContent = code || '(empty)';
+    document.getElementById('code-modal').style.display = 'flex';
+}
+function closeModal() {
+    document.getElementById('code-modal').style.display = 'none';
+}
+document.getElementById('code-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('code-modal')) closeModal();
+});
+</script>
+</body>
+</html>

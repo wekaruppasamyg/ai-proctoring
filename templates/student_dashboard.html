@@ -271,7 +271,8 @@ button:hover{
         </div>
         <div class="menu">
             <a class="active">Dashboard</a>
-            <a href="{{ url_for('materials') }}">Materials</a>
+            <a href="{{ url_for('materials') }}">📚 Materials</a>
+            <a href="/coding-exam">💻 Coding Exam</a>
             <a href="/student-login">Logout</a>
         </div>
     </aside>
@@ -302,8 +303,17 @@ button:hover{
             </div>
         </div>
 
+        <!-- CODING EXAM QUICK LAUNCH -->
+        <div class="cards" style="margin-bottom:0;">
+            <div class="card" style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(99,102,241,0.1));border:1px solid rgba(139,92,246,0.3);">
+                <h3>💻 Coding Exam</h3>
+                <p style="margin-bottom:16px;">Python, HTML, JavaScript, PHP — with live camera monitoring.</p>
+                <a href="/coding-exam" style="display:inline-block;padding:10px 22px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border-radius:20px;font-size:13px;font-weight:600;text-decoration:none;transition:.3s;">Start Coding Exam →</a>
+            </div>
+        </div>
+
         <!-- BOTTOM SECTION: EXAM CARD AND IMAGE EQUAL (Image below status, exam and image side by side) -->
-        <div class="bottom-section">
+        <div class="bottom-section" style="margin-top:30px;">
             <div class="exam-card">
                 <h2>Start Examination</h2>
 

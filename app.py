@@ -1,10 +1,13 @@
-from flask import Flask, render_template, request, redirect, session, url_for, Response, jsonify
+﻿from flask import Flask, render_template, request, redirect, session, url_for, Response, jsonify
 import os
 import psycopg2
 import random
 import string
 import base64
 import shutil
+import subprocess
+import tempfile
+import sys
 from datetime import datetime
 import cv2
 import numpy as np
@@ -17,13 +20,6 @@ from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 app = Flask(__name__)
 app.secret_key = "exam-secret"
 os.makedirs("faces", exist_ok=True)
-
-# ================= EMAIL CONFIG (Resend HTTPS API) =================
-# Render blocks outbound SMTP (port 587/465/25). We use Resend over HTTPS (port 443).
-# Sign up free at https://resend.com → get API key → add to Render environment as RESEND_API_KEY
-RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
-MAIL_FROM = os.environ.get('MAIL_FROM', 'AI Proctoring <onboarding@resend.dev>')
-EMAIL_ENABLED = bool(RESEND_API_KEY)
 
 # ================= MJPEG STREAMING =================
 streams = {}
@@ -51,217 +47,6 @@ def upload_frame():
 @app.route('/mjpeg/<username>')
 def mjpeg_stream(username):
     return Response(gen_mjpeg(username), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-# ================= EMAIL FUNCTIONS =================
-
-def _resend_send(recipient, subject, body, html_body=None):
-    """Send email via Resend HTTPS API. Returns True on success, False on failure.
-    Uses Python built-in urllib — no SMTP, no extra packages, works on Render."""
-    import urllib.request
-    import urllib.error
-    import json
-
-    if not RESEND_API_KEY:
-        print(f"⏭️ RESEND_API_KEY not set — skipping email to {recipient}")
-        return False
-
-    if not recipient or '@' not in str(recipient):
-        print(f"⚠️ Invalid email address: {recipient}")
-        return False
-
-    payload = {
-        "from": MAIL_FROM,
-        "to": [recipient],
-        "subject": subject,
-        "text": body,
-    }
-    if html_body:
-        payload["html"] = html_body
-
-    try:
-        data = json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(
-            'https://api.resend.com/emails',
-            data=data,
-            headers={
-                'Authorization': f'Bearer {RESEND_API_KEY}',
-                'Content-Type': 'application/json',
-            }
-        )
-        print(f"📧 Sending email to {recipient} via Resend API (from: {MAIL_FROM})")
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode())
-            print(f"✅ Email sent to {recipient} — Resend ID: {result.get('id')}")
-            return True
-    except urllib.error.HTTPError as e:
-        body_err = e.read().decode(errors='ignore')
-        print(f"❌ Resend API error {e.code} for {recipient}: {body_err}")
-        return False
-    except Exception as e:
-        import traceback
-        print(f"❌ Email failed to {recipient}: {e}")
-        traceback.print_exc()
-        return False
-
-
-def send_email(recipient, subject, body, html_body=None, wait_for_result=False):
-    """Queue or send email. Background if wait_for_result=False (default)."""
-    if not EMAIL_ENABLED:
-        print(f"⏭️ Email not configured — skipping '{subject}' to {recipient}")
-        return False
-
-    if wait_for_result:
-        return _resend_send(recipient, subject, body, html_body)
-
-    # Always run in a plain thread — no Flask app context needed (pure urllib).
-    threading.Thread(
-        target=_resend_send,
-        args=(recipient, subject, body, html_body),
-        daemon=True
-    ).start()
-    return True
-
-def send_exam_start_email(username, email, subject_name, duration_minutes, wait_for_result=False):
-    """Send email when student starts exam"""
-    subject = f"Exam Started: {subject_name}"
-    body = f"""
-Hello {username},
-
-Your exam has started!
-
-Subject: {subject_name}
-Duration: {duration_minutes} minutes
-Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-Please ensure:
-- You have good lighting
-- Your camera is working
-- You are in a quiet environment
-- You look at the screen during the exam
-
-Good luck with your exam!
-
-Note: Any suspicious behavior will be recorded and reviewed.
-
-Best regards,
-AI Proctoring System
-"""
-    
-    html_body = f"""
-<html>
-  <body style="font-family: Arial, sans-serif; color: #333;">
-    <h2 style="color: #007bff;">Exam Started: {subject_name}</h2>
-    <p>Hello <strong>{username}</strong>,</p>
-    <p>Your exam has started!</p>
-    
-    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-      <p><strong>Subject:</strong> {subject_name}</p>
-      <p><strong>Duration:</strong> {duration_minutes} minutes</p>
-      <p><strong>Started at:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    </div>
-    
-    <h4>Please ensure:</h4>
-    <ul>
-      <li>You have good lighting</li>
-      <li>Your camera is working</li>
-      <li>You are in a quiet environment</li>
-      <li>You look at the screen during the exam</li>
-    </ul>
-    
-    <p style="color: #28a745;"><strong>Good luck with your exam!</strong></p>
-    <p style="color: #666; font-size: 12px; margin-top: 30px;">
-      Note: Any suspicious behavior will be recorded and reviewed.<br>
-      AI Proctoring System
-    </p>
-  </body>
-</html>
-"""
-    return send_email(email, subject, body, html_body, wait_for_result=wait_for_result)
-
-def send_exam_completion_email(username, email, subject_name, score, total_questions, violations, wait_for_result=False):
-    """Send email when exam is completed with score"""
-    percentage = (score / total_questions * 100) if total_questions > 0 else 0
-    
-    subject = f"Exam Completed: {subject_name} - Score: {score}/{total_questions}"
-    body = f"""
-Hello {username},
-
-Your exam has been completed!
-
-Subject: {subject_name}
-Your Score: {score} out of {total_questions}
-Percentage: {percentage:.2f}%
-Exam Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-Violations Detected:
-- Looking Away: {violations.get('looking_away', 0)} times
-- Head Movement: {violations.get('head_movement', 0)} times
-- Eyes Not on Screen: {violations.get('eye_tracker', 0)} times
-- No Blink: {violations.get('no_blink', 0)} times
-- Hand Covering: {violations.get('hand_cover', 0)} times
-- Camera Hidden: {violations.get('camera_hidden', 0)} times
-
-Your results have been saved and will be reviewed by your instructor.
-
-Thank you for taking the exam!
-
-Best regards,
-AI Proctoring System
-"""
-    
-    html_body = f"""
-<html>
-  <body style="font-family: Arial, sans-serif; color: #333;">
-    <h2 style="color: #28a745;">Exam Completed!</h2>
-    <p>Hello <strong>{username}</strong>,</p>
-    <p>Your exam has been completed successfully.</p>
-    
-    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; text-align: center;">
-      <h3 style="color: #007bff; margin: 10px 0;">{subject_name}</h3>
-      <h2 style="color: #28a745; margin: 10px 0;">Score: {score}/{total_questions}</h2>
-      <h3 style="color: #666; margin: 10px 0;">{percentage:.2f}%</h3>
-      <p style="color: #999; font-size: 12px;">Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    </div>
-    
-    <h4>Violations Detected During Exam:</h4>
-    <table style="width: 100%; border-collapse: collapse;">
-      <tr style="background-color: #f8f9fa;">
-        <td style="padding: 10px; border: 1px solid #ddd;"><strong>Violation Type</strong></td>
-        <td style="padding: 10px; border: 1px solid #ddd;"><strong>Count</strong></td>
-      </tr>
-      <tr>
-        <td style="padding: 10px; border: 1px solid #ddd;">Looking Away</td>
-        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('looking_away', 0)}</td>
-      </tr>
-      <tr>
-        <td style="padding: 10px; border: 1px solid #ddd;">Head Movement</td>
-        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('head_movement', 0)}</td>
-      </tr>
-      <tr>
-        <td style="padding: 10px; border: 1px solid #ddd;">Eyes Not on Screen</td>
-        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('eye_tracker', 0)}</td>
-      </tr>
-      <tr>
-        <td style="padding: 10px; border: 1px solid #ddd;">No Blink</td>
-        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('no_blink', 0)}</td>
-      </tr>
-      <tr>
-        <td style="padding: 10px; border: 1px solid #ddd;">Hand Covering</td>
-        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('hand_cover', 0)}</td>
-      </tr>
-      <tr>
-        <td style="padding: 10px; border: 1px solid #ddd;">Camera Hidden</td>
-        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('camera_hidden', 0)}</td>
-      </tr>
-    </table>
-    
-    <p style="margin-top: 20px; color: #666;">Your results have been saved and will be reviewed by your instructor.</p>
-    <p style="color: #28a745;"><strong>Thank you for taking the exam!</strong></p>
-    <p style="color: #999; font-size: 12px; margin-top: 30px;">AI Proctoring System</p>
-  </body>
-</html>
-"""
-    return send_email(email, subject, body, html_body, wait_for_result=wait_for_result)
 
 # ================= DATABASE INIT =================
 
@@ -367,6 +152,23 @@ def init_db():
         subject_id INTEGER,
         upload_date TIMESTAMPTZ,
         enabled BOOLEAN DEFAULT TRUE
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS coding_results (
+        id SERIAL PRIMARY KEY,
+        username TEXT,
+        language TEXT,
+        code TEXT,
+        output TEXT,
+        submitted_at TIMESTAMPTZ,
+        looking_away_count INTEGER DEFAULT 0,
+        tab_switch_count INTEGER DEFAULT 0,
+        camera_hidden_count INTEGER DEFAULT 0,
+        hand_cover_count INTEGER DEFAULT 0,
+        cheating_count INTEGER DEFAULT 0,
+        terminated BOOLEAN DEFAULT FALSE
     )
     """)
 
@@ -634,11 +436,6 @@ def start_exam():
     if not enabled:
         return "This subject is currently locked. Please contact admin."
 
-    # Get student email
-    cur.execute("SELECT email FROM users WHERE username=%s", (session["username"],))
-    student_email_row = cur.fetchone()
-    student_email = student_email_row[0] if student_email_row else None
-
     # Get questions
     cur.execute(
         """
@@ -653,11 +450,6 @@ def start_exam():
 
     if not questions:
         return f"<h2>No questions found for {subject_name}</h2>"
-
-    # Send exam start email
-    if student_email:
-        duration_minutes = 60  # Default duration
-        send_exam_start_email(session["username"], student_email, subject_name, duration_minutes)
 
     # Initialize cheating and event tracking
     session['cheating_count'] = 0
@@ -688,7 +480,7 @@ def monitor_exam():
     if session.get('terminated', False):
         return {"status": "terminated"}
 
-    print("📸 Monitor exam API called")
+    print("ðŸ“¸ Monitor exam API called")
 
     data = request.get_json()
     LOOK_AWAY_COOLDOWN = 3  # seconds
@@ -915,11 +707,6 @@ def submit_exam():
             score += 1
         total_questions += 1
 
-    # Get student email
-    cur.execute("SELECT email FROM users WHERE username=%s", (username,))
-    student_email_row = cur.fetchone()
-    student_email = student_email_row[0] if student_email_row else None
-
     cur.execute(
         """
         INSERT INTO results(
@@ -949,132 +736,7 @@ def submit_exam():
     conn.commit()
     conn.close()
 
-    # Send exam completion email with score
-    if student_email:
-        violations = {
-            'looking_away': looking_away_count,
-            'head_movement': head_movement_count,
-            'eye_tracker': eye_tracker_count,
-            'no_blink': no_blink_count,
-            'hand_cover': hand_cover_count,
-            'camera_hidden': camera_hidden_count
-        }
-        send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
-
     return render_template("exam_finished.html", score=score)
-
-
-# ================= EMAIL TEST =================
-
-@app.route("/test-email")
-def test_email():
-    """Test email configuration - send test email with detailed status (Resend API)"""
-    test_email_addr = request.args.get('email', 'test@example.com')
-
-    api_key_status = "✅ Set" if RESEND_API_KEY else "❌ NOT SET — add RESEND_API_KEY on Render"
-    test_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    config_status = {
-        "EMAIL_ENABLED": EMAIL_ENABLED,
-        "RESEND_API_KEY": api_key_status,
-        "MAIL_FROM": MAIL_FROM,
-        "Test Email": test_email_addr,
-        "Test Time": test_time,
-    }
-    
-    subject = "🧪 AI Proctoring - Email Test (Resend)"
-    body = f"""
-AI Proctoring System - Test Email (Resend API)
-
-If you received this, Resend is working correctly!
-
-Test Time: {test_time}
-
-Configuration:
-- EMAIL_ENABLED: {EMAIL_ENABLED}
-- RESEND_API_KEY: {api_key_status}
-- MAIL_FROM: {MAIL_FROM}
-
-Troubleshooting if email is not arriving:
-1. Check spam / promotions / junk folder
-2. Verify RESEND_API_KEY is set on Render -> Environment
-3. Visit /check-email-config to validate the API key
-4. Check Render logs for errors
-
-Best regards,
-AI Proctoring System
-"""
-
-    html_body = f"""
-<html>
-  <head>
-    <style>
-      body {{ font-family: Arial, sans-serif; color: #333; margin: 20px; }}
-      table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-      th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
-      th {{ background-color: #f8f9fa; }}
-    </style>
-  </head>
-  <body>
-    <h2 style="color: #007bff;">🧪 AI Proctoring — Resend API Test</h2>
-
-    <table>
-      <tr><th>Setting</th><th>Value</th></tr>
-      <tr><td>EMAIL_ENABLED</td><td>{"✅ True" if EMAIL_ENABLED else "❌ False"}</td></tr>
-      <tr><td>RESEND_API_KEY</td><td>{api_key_status}</td></tr>
-      <tr><td>MAIL_FROM</td><td>{MAIL_FROM}</td></tr>
-      <tr><td>Sent To</td><td>{test_email_addr}</td></tr>
-      <tr><td>Test Time</td><td>{test_time}</td></tr>
-    </table>
-
-    <p>✅ If you see this email, <strong>Resend is configured correctly</strong>.</p>
-    <p>If email is not arriving, visit
-      <a href="/check-email-config">/check-email-config</a> to validate your API key.
-    </p>
-  </body>
-</html>
-"""
-    
-    # For diagnostics, send synchronously so the page reflects real result.
-    result = send_email(test_email_addr, subject, body, html_body, wait_for_result=True)
-
-    status_html = f"""
-<html>
-  <head>
-    <style>
-      body {{ font-family: Arial, sans-serif; margin: 30px; }}
-      .success {{ color: #28a745; font-size: 22px; font-weight: bold; }}
-      .error {{ color: #dc3545; font-size: 22px; font-weight: bold; }}
-      .box {{ background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; }}
-    </style>
-  </head>
-  <body>
-    {"<div class='success'>✅ Test email SENT via Resend!</div>" if result else "<div class='error'>❌ Failed — check config below</div>"}
-
-    <div class="box">
-      <h3>⚙️ Resend Configuration:</h3>
-      <p><strong>EMAIL_ENABLED:</strong> {EMAIL_ENABLED}</p>
-      <p><strong>RESEND_API_KEY:</strong> {api_key_status}</p>
-      <p><strong>MAIL_FROM:</strong> {MAIL_FROM}</p>
-      <p><strong>Sent To:</strong> {test_email_addr}</p>
-      <p><strong>Time:</strong> {test_time}</p>
-    </div>
-
-    <div class="box">
-      <h3>📋 Troubleshooting:</h3>
-      <ol>
-        <li>Visit <a href="/check-email-config">/check-email-config</a> to validate your API key</li>
-        <li>Make sure <code>RESEND_API_KEY</code> is set on Render → Environment</li>
-        <li>Check spam / promotions folder</li>
-        <li>Get a free key at <a href="https://resend.com" target="_blank">resend.com</a></li>
-        <li><a href="/test-email?email={test_email_addr}">Try again</a></li>
-      </ol>
-    </div>
-  </body>
-</html>
-"""
-
-    return status_html
 
 
 # ================= ADMIN =================
@@ -1255,164 +917,6 @@ def admin_results():
 
     return render_template("admin_results.html", results=results)
 
-@app.route("/send-result-email", methods=["POST"])
-def send_result_email():
-    """Admin sends result email to individual student"""
-    try:
-        if not session.get("admin"):
-            return jsonify({"status": "unauthorized"})
-        
-        # Check if email is configured
-        if not EMAIL_ENABLED:
-            return jsonify({
-                "status": "error",
-                "message": "Email not configured. Add RESEND_API_KEY in Render → Environment. Get a free key at https://resend.com"
-            })
-        
-        data = request.get_json(force=True, silent=True) or {}
-        result_id = data.get("result_id")
-        
-        if not result_id:
-            return jsonify({"status": "error", "message": "result_id required"})
-        
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Get result with violations
-        cur.execute("""
-            SELECT username, subject, score, 
-                   looking_away_count, head_movement_count, eye_tracker_count,
-                   no_blink_count, hand_cover_count, camera_hidden_count
-            FROM results WHERE id=%s
-        """, (result_id,))
-        
-        result_row = cur.fetchone()
-        if not result_row:
-            conn.close()
-            return jsonify({"status": "not_found"})
-        
-        username, subject, score, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden = result_row
-        
-        # Get student email
-        cur.execute("SELECT email FROM users WHERE username=%s", (username,))
-        email_row = cur.fetchone()
-        
-        if not email_row or not email_row[0]:
-            conn.close()
-            return jsonify({"status": "no_email"})
-        
-        student_email = email_row[0]
-        
-        # Get total questions for subject
-        cur.execute("SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)", (subject,))
-        total_q = cur.fetchone()
-        total_questions = (total_q[0] if total_q else 0) or 20
-        conn.close()
-        
-        violations = {
-            'looking_away': look_away or 0,
-            'head_movement': head_move or 0,
-            'eye_tracker': eye_track or 0,
-            'no_blink': no_blink or 0,
-            'hand_cover': hand_cover or 0,
-            'camera_hidden': cam_hidden or 0
-        }
-        
-        # Queue in background thread — returns immediately.
-        send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
-        
-        return jsonify({"status": "queued", "email": student_email})
-    
-    except Exception as e:
-        print(f"Error in send_result_email: {str(e)}")
-        import traceback; traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)})
-        return jsonify({"status": "error", "message": str(e)})
-
-@app.route("/send-all-results-email", methods=["POST"])
-def send_all_results_email():
-    """Admin sends result emails to all students"""
-    try:
-        if not session.get("admin"):
-            return jsonify({"status": "unauthorized"})
-        
-        # Check if email is configured
-        if not EMAIL_ENABLED:
-            return jsonify({
-                "status": "error",
-                "message": "Email not configured. Add RESEND_API_KEY in Render → Environment. Get a free key at https://resend.com"
-            })
-        
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        # Get all results with student emails
-        cur.execute("""
-            SELECT r.username, r.subject, r.score, u.email,
-                   r.looking_away_count, r.head_movement_count, r.eye_tracker_count,
-                   r.no_blink_count, r.hand_cover_count, r.camera_hidden_count
-            FROM results r
-            JOIN users u ON r.username = u.username
-            WHERE u.email IS NOT NULL AND u.email != ''
-        """)
-
-        rows = cur.fetchall()
-        conn.close()
-
-        # Fire-and-forget background job. Bulk sending can take long and may exceed request timeouts.
-        def _send_bulk_async(batch_rows):
-            try:
-                subject_total_cache = {}
-
-                for (username, subject, score, email, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden) in batch_rows:
-                    if subject not in subject_total_cache:
-                        try:
-                            conn2 = get_db_connection()
-                            cur2 = conn2.cursor()
-                            cur2.execute(
-                                "SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)",
-                                (subject,),
-                            )
-                            total_q = cur2.fetchone()
-                            subject_total_cache[subject] = (total_q[0] if total_q else 20) or 20
-                            conn2.close()
-                        except Exception as e:
-                            print(f"⚠️ Failed to load question count for subject '{subject}': {e}")
-                            subject_total_cache[subject] = 20
-
-                    total_questions = subject_total_cache.get(subject, 20)
-                    violations = {
-                        'looking_away': look_away or 0,
-                        'head_movement': head_move or 0,
-                        'eye_tracker': eye_track or 0,
-                        'no_blink': no_blink or 0,
-                        'hand_cover': hand_cover or 0,
-                        'camera_hidden': cam_hidden or 0,
-                    }
-
-                    # Synchronous inside background thread = accurate logs, no request timeout.
-                    send_exam_completion_email(
-                        username,
-                        email,
-                        subject,
-                        score,
-                        total_questions,
-                        violations,
-                        wait_for_result=True,
-                    )
-            except Exception as e:
-                print(f"❌ Bulk email job failed: {e}")
-                import traceback
-                traceback.print_exc()
-
-        threading.Thread(target=_send_bulk_async, args=(rows,), daemon=True).start()
-
-        return jsonify({"status": "queued", "count": len(rows)})
-    
-    except Exception as e:
-        print(f"Error in send_all_results_email: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)})
-
 @app.route("/delete-result", methods=["POST"])
 def delete_result():
     if not session.get("admin"):
@@ -1552,55 +1056,182 @@ def logout():
     session.clear()
     return redirect(url_for("student_login"))
 
-# ================= EMAIL DIAGNOSTICS =================
-@app.route("/check-email-config")
-def check_email_config():
-    """Live test of Resend API configuration — visit in browser to diagnose email issues."""
-    import urllib.request, urllib.error, json
+# ================= CODING EXAM MODULE =================
 
-    lines = []
-    lines.append("=== AI Proctoring — Email Configuration ===")
-    lines.append("")
-    lines.append(f"EMAIL_ENABLED  : {EMAIL_ENABLED}")
-    lines.append(f"RESEND_API_KEY : {'✅ SET (' + str(len(RESEND_API_KEY)) + ' chars)' if RESEND_API_KEY else '❌ NOT SET'}")
-    lines.append(f"MAIL_FROM      : {MAIL_FROM}")
-    lines.append("")
+CODING_LANGUAGES = ["Python", "HTML", "JavaScript", "PHP"]
 
-    if not RESEND_API_KEY:
-        lines.append("❌ RESEND_API_KEY is not set.")
-        lines.append("")
-        lines.append("Steps to fix:")
-        lines.append("  1. Sign up free at https://resend.com")
-        lines.append("  2. Go to API Keys → Create API Key")
-        lines.append("  3. On Render: Environment → add  RESEND_API_KEY = re_xxxxxxxxxxxx")
-        lines.append("  4. Save → Render redeploys → emails will work")
-    else:
-        # Verify API key by listing domains (lightweight check)
-        try:
-            req = urllib.request.Request(
-                'https://api.resend.com/domains',
-                headers={'Authorization': f'Bearer {RESEND_API_KEY}'}
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                lines.append("✅ RESEND_API_KEY is VALID — API connection successful!")
-                lines.append("")
-                lines.append("If emails are not arriving:")
-                lines.append("  • Check Gmail Spam / Promotions / All Mail folders")
-                lines.append("  • Search Gmail for:  from:onboarding@resend.dev")
-                lines.append("  • To send from your own address, verify your domain at resend.com/domains")
-        except urllib.error.HTTPError as e:
-            body_err = e.read().decode(errors='ignore')
-            if e.code == 401:
-                lines.append(f"❌ API KEY INVALID (401 Unauthorized)")
-                lines.append(f"   Response: {body_err[:200]}")
-                lines.append("")
-                lines.append("Fix: Go to Render → Environment → update RESEND_API_KEY with a valid key from resend.com")
-            else:
-                lines.append(f"⚠️ Resend API returned HTTP {e.code}: {body_err[:200]}")
-        except Exception as e:
-            lines.append(f"❌ Failed to reach Resend API: {type(e).__name__}: {e}")
+@app.route("/coding-exam", methods=["GET", "POST"])
+def coding_exam():
+    if "username" not in session:
+        return redirect(url_for("student_login"))
 
-    return "<pre style='font-family:monospace;font-size:15px;padding:20px;background:#111;color:#eee'>" + "\n".join(lines) + "</pre>"
+    if request.method == "POST":
+        language = request.form.get("language", "Python")
+        session['coding_language'] = language
+        # Reset monitoring counters for coding exam
+        session['cheating_count'] = 0
+        session['terminated'] = False
+        session['looking_away_count'] = 0
+        session['tab_switch_count'] = 0
+        session['camera_hidden_count'] = 0
+        session['hand_cover_count'] = 0
+        session['last_look_away_ts'] = 0
+        session['last_camera_hidden_ts'] = 0
+        session['last_hand_cover_ts'] = 0
+        session['last_eye_tracker_ts'] = 0
+        session['last_head_movement_ts'] = 0
+        session['eye_tracker_count'] = 0
+        session['head_movement_count'] = 0
+        session['no_blink_count'] = 0
+        session['last_no_blink_ts'] = 0
+        session['current_subject'] = f"Coding-{language}"
+        return render_template("coding_exam.html", language=language, username=session["username"])
+
+    return render_template("coding_exam_select.html", languages=CODING_LANGUAGES)
+
+
+@app.route("/run-code", methods=["POST"])
+def run_code():
+    if "username" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json()
+    language = data.get("language", "Python")
+    code = data.get("code", "")
+    output = ""
+    error = ""
+
+    try:
+        if language == "Python":
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
+                f.write(code)
+                tmp_path = f.name
+            try:
+                result = subprocess.run(
+                    [sys.executable, tmp_path],
+                    capture_output=True, text=True, timeout=10
+                )
+                output = result.stdout
+                error = result.stderr
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+        elif language == "JavaScript":
+            # Return JS for browser execution in sandboxed iframe
+            return jsonify({"type": "browser", "language": "JavaScript", "code": code})
+
+        elif language == "HTML":
+            # Return HTML for browser rendering in sandboxed iframe
+            return jsonify({"type": "browser", "language": "HTML", "code": code})
+
+        elif language == "PHP":
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".php", delete=False, encoding="utf-8") as f:
+                f.write(code)
+                tmp_path = f.name
+            try:
+                result = subprocess.run(
+                    ["php", tmp_path],
+                    capture_output=True, text=True, timeout=10
+                )
+                output = result.stdout
+                error = result.stderr
+            except FileNotFoundError:
+                error = "PHP is not installed on the server. Code saved for review."
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+        if error and not output:
+            return jsonify({"type": "console", "output": error, "is_error": True})
+        combined = output
+        if error:
+            combined += "\n--- STDERR ---\n" + error
+        return jsonify({"type": "console", "output": combined, "is_error": bool(error)})
+
+    except subprocess.TimeoutExpired:
+        return jsonify({"type": "console", "output": "⏱ Execution timed out (10s limit).", "is_error": True})
+    except Exception as e:
+        return jsonify({"type": "console", "output": f"Error: {str(e)}", "is_error": True})
+
+
+@app.route("/submit-coding-exam", methods=["POST"])
+def submit_coding_exam():
+    if "username" not in session:
+        return redirect(url_for("student_login"))
+
+    data = request.get_json()
+    language = data.get("language", session.get("coding_language", "Python"))
+    code = data.get("code", "")
+    output = data.get("output", "")
+    username = session["username"]
+
+    looking_away_count = session.get('looking_away_count', 0)
+    tab_switch_count = session.get('tab_switch_count', 0)
+    camera_hidden_count = session.get('camera_hidden_count', 0)
+    hand_cover_count = session.get('hand_cover_count', 0)
+    cheating_count = session.get('cheating_count', 0)
+    terminated = session.get('terminated', False)
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO coding_results
+              (username, language, code, output, submitted_at,
+               looking_away_count, tab_switch_count, camera_hidden_count,
+               hand_cover_count, cheating_count, terminated)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (
+                username, language, code, output, datetime.now(),
+                looking_away_count, tab_switch_count, camera_hidden_count,
+                hand_cover_count, cheating_count, terminated,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/admin-coding-results")
+def admin_coding_results():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, username, language, code, output, submitted_at,
+               looking_away_count, tab_switch_count, camera_hidden_count,
+               hand_cover_count, cheating_count, terminated
+        FROM coding_results
+        ORDER BY submitted_at DESC
+    """)
+    results = cur.fetchall()
+    conn.close()
+
+    return render_template("admin_coding_results.html", results=results)
+
+
+@app.route("/delete-coding-result", methods=["POST"])
+def delete_coding_result():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    result_id = request.form["result_id"]
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM coding_results WHERE id=%s", (result_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("admin_coding_results"))
 
 
 # ================= RUN APP =================
