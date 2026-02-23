@@ -115,7 +115,25 @@ header{
     background:
         linear-gradient(#020617,#020617) padding-box,
         linear-gradient(120deg,var(--primary),var(--accent)) border-box;
-    /* Removed animation: pulseBorder */
+    display:block;
+}
+
+.video-wrapper{
+    position:relative;
+    display:inline-block;
+    width:100%;
+    border-radius:16px;
+    overflow:hidden;
+}
+
+#overlay-canvas{
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    pointer-events:none;
+    border-radius:16px;
 }
 
 /* ===== QUIZ CARD ===== */
@@ -270,7 +288,10 @@ header{
         <!-- CAMERA -->
         <div class="camera-card">
             <h3>Live Proctoring</h3>
-        <video id="video" autoplay muted></video>
+        <div class="video-wrapper">
+            <video id="video" autoplay muted></video>
+            <canvas id="overlay-canvas"></canvas>
+        </div>
 
 <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
 
@@ -554,9 +575,102 @@ faceMesh.setOptions({
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5
 });
+const overlayCanvas = document.getElementById('overlay-canvas');
+const octx = overlayCanvas.getContext('2d');
+
+// Key landmark indices to highlight in red
+const KEY_LANDMARKS = [1, 4, 6, 33, 61, 78, 133, 145, 152, 159,
+    263, 291, 308, 362, 374, 386, 454, 468, 473];
+
+function drawFaceLandmarks(lm, w, h) {
+    octx.clearRect(0, 0, w, h);
+
+    // All landmarks — small green dots
+    octx.fillStyle = '#00ff44';
+    for (const pt of lm) {
+        octx.beginPath();
+        octx.arc(pt.x * w, pt.y * h, 1.8, 0, 2 * Math.PI);
+        octx.fill();
+    }
+
+    // Key landmarks — larger red dots
+    octx.fillStyle = '#ff3333';
+    for (const idx of KEY_LANDMARKS) {
+        if (!lm[idx]) continue;
+        octx.beginPath();
+        octx.arc(lm[idx].x * w, lm[idx].y * h, 3.5, 0, 2 * Math.PI);
+        octx.fill();
+    }
+
+    // Left eye outline (red)
+    const leftEyeIdx = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+    octx.strokeStyle = 'rgba(255,60,60,0.85)';
+    octx.lineWidth = 1.2;
+    octx.beginPath();
+    leftEyeIdx.forEach((i, n) => {
+        const p = lm[i]; if (!p) return;
+        n === 0 ? octx.moveTo(p.x*w, p.y*h) : octx.lineTo(p.x*w, p.y*h);
+    });
+    octx.closePath();
+    octx.stroke();
+
+    // Right eye outline (red)
+    const rightEyeIdx = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
+    octx.beginPath();
+    rightEyeIdx.forEach((i, n) => {
+        const p = lm[i]; if (!p) return;
+        n === 0 ? octx.moveTo(p.x*w, p.y*h) : octx.lineTo(p.x*w, p.y*h);
+    });
+    octx.closePath();
+    octx.stroke();
+
+    // Gaze direction line from nose tip (yellow)
+    const nose  = lm[1],  rightEar = lm[454];
+    if (nose && rightEar) {
+        octx.strokeStyle = '#ffee00';
+        octx.lineWidth = 1.8;
+        octx.beginPath();
+        octx.moveTo(nose.x * w, nose.y * h);
+        octx.lineTo(rightEar.x * w, rightEar.y * h);
+        octx.stroke();
+    }
+
+    // Vertical axis line nose → forehead (cyan)
+    const forehead = lm[10];
+    if (nose && forehead) {
+        octx.strokeStyle = '#00e5ff';
+        octx.lineWidth = 1.8;
+        octx.beginPath();
+        octx.moveTo(nose.x * w, nose.y * h);
+        octx.lineTo(forehead.x * w, forehead.y * h);
+        octx.stroke();
+    }
+
+    // Left iris (small cyan circle)
+    if (lm[468]) {
+        octx.strokeStyle = '#00e5ff'; octx.lineWidth = 1.5;
+        octx.beginPath();
+        octx.arc(lm[468].x*w, lm[468].y*h, 5, 0, 2*Math.PI);
+        octx.stroke();
+    }
+    // Right iris
+    if (lm[473]) {
+        octx.strokeStyle = '#00e5ff'; octx.lineWidth = 1.5;
+        octx.beginPath();
+        octx.arc(lm[473].x*w, lm[473].y*h, 5, 0, 2*Math.PI);
+        octx.stroke();
+    }
+}
+
 faceMesh.onResults(results => {
+    // Sync overlay canvas size to displayed video size
+    overlayCanvas.width  = videoElement.clientWidth  || videoElement.videoWidth  || 320;
+    overlayCanvas.height = videoElement.clientHeight || videoElement.videoHeight || 240;
+    const W = overlayCanvas.width, H = overlayCanvas.height;
+
     if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
+        drawFaceLandmarks(landmarks, W, H);
 
         // Looking away
         if (isLookingAway(landmarks)) {
@@ -737,6 +851,7 @@ faceMesh.onResults(results => {
         }
 
     } else {
+        octx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         errorMessage.style.display = 'none';
         lookingAwayFrames = 0;
         eyeTrackerMessage.style.display = 'none';
