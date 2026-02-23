@@ -925,8 +925,20 @@ def submit_exam():
 
 @app.route("/test-email")
 def test_email():
-    """Test email configuration - send test email"""
+    """Test email configuration - send test email with detailed status"""
     test_email_addr = request.args.get('email', 'test@example.com')
+    
+    # Check configuration
+    config_status = {
+        "EMAIL_ENABLED": EMAIL_ENABLED,
+        "MAIL_SERVER": app.config.get('MAIL_SERVER', 'NOT SET'),
+        "MAIL_PORT": app.config.get('MAIL_PORT', 'NOT SET'),
+        "MAIL_USE_TLS": app.config.get('MAIL_USE_TLS', 'NOT SET'),
+        "MAIL_USERNAME": "✓ Set" if app.config.get('MAIL_USERNAME') else "✗ NOT SET",
+        "MAIL_PASSWORD": "✓ Set" if app.config.get('MAIL_PASSWORD') else "✗ NOT SET",
+        "Test Email": test_email_addr,
+        "Test Time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
     
     subject = "🧪 AI Proctoring - Email Test"
     body = f"""
@@ -934,15 +946,21 @@ This is a test email from AI Proctoring System.
 
 If you received this, email configuration is working correctly!
 
-Test Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Test Time: {config_status['Test Time']}
 
-Email Status:
-- EMAIL_ENABLED: {EMAIL_ENABLED}
-- MAIL_SERVER: {app.config['MAIL_SERVER']}
-- MAIL_PORT: {app.config['MAIL_PORT']}
-- MAIL_USE_TLS: {app.config['MAIL_USE_TLS']}
-- MAIL_USERNAME: {"✓ Set" if app.config['MAIL_USERNAME'] else "✗ Not Set"}
-- MAIL_PASSWORD: {"✓ Set" if app.config['MAIL_PASSWORD'] else "✗ Not Set"}
+Email Configuration:
+- EMAIL_ENABLED: {config_status['EMAIL_ENABLED']}
+- MAIL_SERVER: {config_status['MAIL_SERVER']}
+- MAIL_PORT: {config_status['MAIL_PORT']}
+- MAIL_USE_TLS: {config_status['MAIL_USE_TLS']}
+- MAIL_USERNAME: {config_status['MAIL_USERNAME']}
+- MAIL_PASSWORD: {config_status['MAIL_PASSWORD']}
+
+Troubleshooting:
+1. Check spam folder in Gmail
+2. Whitelist noreply@aiproctoring.com
+3. Check Render environment variables
+4. Check Render logs for errors
 
 Best regards,
 AI Proctoring System
@@ -950,38 +968,138 @@ AI Proctoring System
 
     html_body = f"""
 <html>
-  <body style="font-family: Arial, sans-serif; color: #333;">
-    <h2 style="color: #007bff;">🧪 Email Test Successful!</h2>
-    <p>This is a test email from <strong>AI Proctoring System</strong>.</p>
-    <p style="color: #28a745;"><strong>If you received this, email configuration is working!</strong></p>
+  <head>
+    <style>
+      body {{ font-family: Arial, sans-serif; color: #333; margin: 20px; }}
+      .success {{ color: #28a745; font-weight: bold; }}
+      .error {{ color: #dc3545; font-weight: bold; }}
+      .info {{ color: #007bff; }}
+      table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+      th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
+      th {{ background-color: #f8f9fa; }}
+      .config-box {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; font-family: monospace; }}
+    </style>
+  </head>
+  <body>
+    <h2 style="color: #007bff;">🧪 AI Proctoring Email Test</h2>
     
-    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; font-family: monospace; font-size: 12px;">
-      <p><strong>Email Configuration Status:</strong></p>
-      <p>EMAIL_ENABLED: {EMAIL_ENABLED}</p>
-      <p>MAIL_SERVER: {app.config['MAIL_SERVER']}</p>
-      <p>MAIL_PORT: {app.config['MAIL_PORT']}</p>
-      <p>MAIL_USE_TLS: {app.config['MAIL_USE_TLS']}</p>
-      <p>MAIL_USERNAME: {"✓ Set" if app.config['MAIL_USERNAME'] else "✗ Not Set"}</p>
-      <p>Test Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    <div class="config-box">
+      <h3>📧 Email Configuration Status:</h3>
+      <table>
+        <tr>
+          <th>Setting</th>
+          <th>Value</th>
+          <th>Status</th>
+        </tr>
+        <tr>
+          <td>EMAIL_ENABLED</td>
+          <td>{config_status['EMAIL_ENABLED']}</td>
+          <td>{"✅" if config_status['EMAIL_ENABLED'] else "❌"}</td>
+        </tr>
+        <tr>
+          <td>MAIL_SERVER</td>
+          <td>{config_status['MAIL_SERVER']}</td>
+          <td>{"✅" if config_status['MAIL_SERVER'] != 'NOT SET' else "❌"}</td>
+        </tr>
+        <tr>
+          <td>MAIL_PORT</td>
+          <td>{config_status['MAIL_PORT']}</td>
+          <td>{"✅" if config_status['MAIL_PORT'] != 'NOT SET' else "❌"}</td>
+        </tr>
+        <tr>
+          <td>MAIL_USE_TLS</td>
+          <td>{config_status['MAIL_USE_TLS']}</td>
+          <td>{"✅" if config_status['MAIL_USE_TLS'] != 'NOT SET' else "❌"}</td>
+        </tr>
+        <tr>
+          <td>MAIL_USERNAME</td>
+          <td>{config_status['MAIL_USERNAME']}</td>
+          <td>{"✅" if "Set" in config_status['MAIL_USERNAME'] else "❌"}</td>
+        </tr>
+        <tr>
+          <td>MAIL_PASSWORD</td>
+          <td>{config_status['MAIL_PASSWORD']}</td>
+          <td>{"✅" if "Set" in config_status['MAIL_PASSWORD'] else "❌"}</td>
+        </tr>
+      </table>
     </div>
     
-    <p style="color: #999; font-size: 12px; margin-top: 30px;">AI Proctoring System</p>
+    <div style="margin: 20px 0;">
+      <h3>📮 Test Email Details:</h3>
+      <p><strong>To:</strong> {test_email_addr}</p>
+      <p><strong>Subject:</strong> {subject}</p>
+      <p><strong>Time:</strong> {config_status['Test Time']}</p>
+    </div>
+    
+    <div style="margin: 20px 0; padding: 15px; border-left: 4px solid #007bff; background-color: #e7f3ff;">
+      <h3>❓ Email Not Arriving?</h3>
+      <ol>
+        <li><strong>Check Spam Folder</strong> - Email might be in spam/promotions</li>
+        <li><strong>Whitelist Sender</strong> - Add noreply@aiproctoring.com to contacts</li>
+        <li><strong>Check Configuration</strong> - All ✅ marks above should be present</li>
+        <li><strong>Verify Password</strong> - Gmail app password (16 chars, no spaces)</li>
+        <li><strong>Check Render Logs</strong> - Look for error messages</li>
+        <li><strong>Try Again</strong> - Sometimes takes 1-2 minutes</li>
+      </ol>
+    </div>
+    
+    <hr>
+    <p style="color: #999; font-size: 12px;">
+      If you need help, reply with:
+      - What you see when you visit /test-email
+      - Whether emails appear in spam
+      - Screenshot of Render environment variables
+    </p>
   </body>
 </html>
 """
     
     result = send_email(test_email_addr, subject, body, html_body)
     
-    if result:
-        return f"✅ Test email sent to {test_email_addr}. Check your inbox!"
-    else:
-        return f"❌ Failed to send test email. Check email configuration:<br>" \
-               f"EMAIL_ENABLED: {EMAIL_ENABLED}<br>" \
-               f"MAIL_USERNAME: {app.config['MAIL_USERNAME']}<br>" \
-               f"MAIL_PASSWORD: {'Set' if app.config['MAIL_PASSWORD'] else 'NOT SET'}<br>" \
-               f"MAIL_SERVER: {app.config['MAIL_SERVER']}<br>" \
-               f"MAIL_PORT: {app.config['MAIL_PORT']}<br>" \
-               f"Check Render logs for details."
+    # Return HTML status page
+    status_html = f"""
+<html>
+  <head>
+    <style>
+      body {{ font-family: Arial, sans-serif; margin: 30px; }}
+      .success {{ color: #28a745; font-size: 24px; font-weight: bold; }}
+      .error {{ color: #dc3545; font-size: 24px; font-weight: bold; }}
+      .box {{ background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; }}
+    </style>
+  </head>
+  <body>
+    {"<div class='success'>✅ Test email SENT successfully!</div>" if result else "<div class='error'>❌ Failed to send test email</div>"}
+    
+    <div class="box">
+      <h3>📧 Email Details:</h3>
+      <p><strong>Sent to:</strong> {test_email_addr}</p>
+      <p><strong>Subject:</strong> {subject}</p>
+      <p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+    
+    <div class="box">
+      <h3>⚙️ Configuration Status:</h3>
+      <p>EMAIL_ENABLED: {config_status['EMAIL_ENABLED']}</p>
+      <p>MAIL_USERNAME: {config_status['MAIL_USERNAME']}</p>
+      <p>MAIL_PASSWORD: {config_status['MAIL_PASSWORD']}</p>
+      <p>MAIL_SERVER: {config_status['MAIL_SERVER']}</p>
+      <p>MAIL_PORT: {config_status['MAIL_PORT']}</p>
+    </div>
+    
+    <div class="box">
+      <h3>📋 What to do next:</h3>
+      <ol>
+        <li>Check your email inbox (including spam folder)</li>
+        <li>If not received, check Render logs for errors</li>
+        <li>Verify all email variables are set on Render</li>
+        <li>Click <a href="/test-email?email={test_email_addr}">here to try again</a></li>
+      </ol>
+    </div>
+  </body>
+</html>
+"""
+    
+    return status_html
 
 
 # ================= ADMIN =================
