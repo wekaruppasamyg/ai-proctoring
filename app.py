@@ -321,6 +321,8 @@ def init_db():
     cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS camera_hidden_count INTEGER DEFAULT 0")
     cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS hand_cover_count INTEGER DEFAULT 0")
     cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS no_blink_count INTEGER DEFAULT 0")
+    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS head_movement_count INTEGER DEFAULT 0")
+    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS eye_tracker_count INTEGER DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS materials (
@@ -889,9 +891,10 @@ def submit_exam():
         """
         INSERT INTO results(
             username,subject,score,date,cheating_count,terminated,
-            looking_away_count,tab_switch_count,camera_hidden_count,hand_cover_count,no_blink_count
+            looking_away_count,tab_switch_count,camera_hidden_count,hand_cover_count,no_blink_count,
+            head_movement_count,eye_tracker_count
         )
-        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """,
         (
             username,
@@ -905,6 +908,8 @@ def submit_exam():
             camera_hidden_count,
             hand_cover_count,
             no_blink_count,
+            head_movement_count,
+            eye_tracker_count,
         ),
     )
 
