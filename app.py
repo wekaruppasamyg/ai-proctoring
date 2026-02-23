@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, redirect, session, url_for, Response, jsonify
-from flask_mail import Mail, Message
 import os
 import psycopg2
 import random
@@ -19,27 +18,12 @@ app = Flask(__name__)
 app.secret_key = "exam-secret"
 os.makedirs("faces", exist_ok=True)
 
-# ================= EMAIL CONFIG =================
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() in ['true', '1', 'yes']
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-_raw_mail_password = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_PASSWORD'] = _raw_mail_password.replace(' ', '') if _raw_mail_password else None
-
-# Gmail/SMTP providers commonly reject spoofed From addresses.
-# If MAIL_DEFAULT_SENDER is not set, default to the authenticated mailbox.
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or app.config['MAIL_USERNAME'] or 'noreply@aiproctoring.com'
-app.config['MAIL_SUPPRESS_SEND'] = False
-
-# Check if email is configured (requires both username and password)
-EMAIL_ENABLED = bool(app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD'])
-
-try:
-    mail = Mail(app)
-except Exception as e:
-    print(f"⚠️ Email service not initialized: {e}")
-    mail = None
+# ================= EMAIL CONFIG (Resend HTTPS API) =================
+# Render blocks outbound SMTP (port 587/465/25). We use Resend over HTTPS (port 443).
+# Sign up free at https://resend.com → get API key → add to Render environment as RESEND_API_KEY
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+MAIL_FROM = os.environ.get('MAIL_FROM', 'AI Proctoring <onboarding@resend.dev>')
+EMAIL_ENABLED = bool(RESEND_API_KEY)
 
 # ================= MJPEG STREAMING =================
 streams = {}
@@ -70,47 +54,71 @@ def mjpeg_stream(username):
 
 # ================= EMAIL FUNCTIONS =================
 
-def send_email(recipient, subject, body, html_body=None, wait_for_result=False):
-    """Send email to recipient.
+def _resend_send(recipient, subject, body, html_body=None):
+    """Send email via Resend HTTPS API. Returns True on success, False on failure.
+    Uses Python built-in urllib — no SMTP, no extra packages, works on Render."""
+    import urllib.request
+    import urllib.error
+    import json
 
-    If wait_for_result=True, sends synchronously and returns True/False based on actual SMTP send.
-    If wait_for_result=False, sends in a background thread and returns True if queued.
-    """
-    if not EMAIL_ENABLED or not mail:
-        msg = f"⏭️ Email NOT CONFIGURED - Cannot send '{subject}' to {recipient}"
-        print(msg)
+    if not RESEND_API_KEY:
+        print(f"⏭️ RESEND_API_KEY not set — skipping email to {recipient}")
         return False
-    
+
     if not recipient or '@' not in str(recipient):
         print(f"⚠️ Invalid email address: {recipient}")
         return False
-    
-    print(f"📧 Attempting to send email to {recipient} via {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']} (sender: {app.config.get('MAIL_DEFAULT_SENDER')})")
-    msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
+
+    payload = {
+        "from": MAIL_FROM,
+        "to": [recipient],
+        "subject": subject,
+        "text": body,
+    }
+    if html_body:
+        payload["html"] = html_body
+
+    try:
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            'https://api.resend.com/emails',
+            data=data,
+            headers={
+                'Authorization': f'Bearer {RESEND_API_KEY}',
+                'Content-Type': 'application/json',
+            }
+        )
+        print(f"📧 Sending email to {recipient} via Resend API (from: {MAIL_FROM})")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode())
+            print(f"✅ Email sent to {recipient} — Resend ID: {result.get('id')}")
+            return True
+    except urllib.error.HTTPError as e:
+        body_err = e.read().decode(errors='ignore')
+        print(f"❌ Resend API error {e.code} for {recipient}: {body_err}")
+        return False
+    except Exception as e:
+        import traceback
+        print(f"❌ Email failed to {recipient}: {e}")
+        traceback.print_exc()
+        return False
+
+
+def send_email(recipient, subject, body, html_body=None, wait_for_result=False):
+    """Queue or send email. Background if wait_for_result=False (default)."""
+    if not EMAIL_ENABLED:
+        print(f"⏭️ Email not configured — skipping '{subject}' to {recipient}")
+        return False
 
     if wait_for_result:
-        try:
-            mail.send(msg)
-            print(f"✅ Email SUCCESSFULLY sent to {recipient}: {subject}")
-            return True
-        except Exception as e:
-            print(f"❌ Email FAILED to send to {recipient}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return False
+        return _resend_send(recipient, subject, body, html_body)
 
-    # Send email in background thread to prevent request latency
-    def _send_email_async():
-        try:
-            mail.send(msg)
-            print(f"✅ Email SUCCESSFULLY sent to {recipient}: {subject}")
-        except Exception as e:
-            print(f"❌ Email FAILED to send to {recipient}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
-    email_thread = threading.Thread(target=_send_email_async, daemon=True)
-    email_thread.start()
+    # Always run in a plain thread — no Flask app context needed (pure urllib).
+    threading.Thread(
+        target=_resend_send,
+        args=(recipient, subject, body, html_body),
+        daemon=True
+    ).start()
     return True
 
 def send_exam_start_email(username, email, subject_name, duration_minutes, wait_for_result=False):
@@ -1618,55 +1626,52 @@ def logout():
 # ================= EMAIL DIAGNOSTICS =================
 @app.route("/check-email-config")
 def check_email_config():
-    """Live SMTP connection test — shows exact Gmail error in browser"""
-    import smtplib
-    import ssl
-
-    server   = app.config.get('MAIL_SERVER', 'smtp.gmail.com')
-    port_num = app.config.get('MAIL_PORT', 587)
-    username = app.config.get('MAIL_USERNAME') or ''
-    password = app.config.get('MAIL_PASSWORD') or ''
-    use_tls  = app.config.get('MAIL_USE_TLS', True)
+    """Live test of Resend API configuration — visit in browser to diagnose email issues."""
+    import urllib.request, urllib.error, json
 
     lines = []
-    lines.append(f"EMAIL_ENABLED : {EMAIL_ENABLED}")
-    lines.append(f"MAIL_SERVER   : {server}")
-    lines.append(f"MAIL_PORT     : {port_num}")
-    lines.append(f"MAIL_USE_TLS  : {use_tls}")
-    lines.append(f"MAIL_USERNAME : {'✅ SET → ' + username[:4] + '***' if username else '❌ NOT SET'}")
-    lines.append(f"MAIL_PASSWORD : {'✅ SET (' + str(len(password)) + ' chars)' if password else '❌ NOT SET'}")
-    lines.append(f"DEFAULT_SENDER: {app.config.get('MAIL_DEFAULT_SENDER')}")
+    lines.append("=== AI Proctoring — Email Configuration ===")
+    lines.append("")
+    lines.append(f"EMAIL_ENABLED  : {EMAIL_ENABLED}")
+    lines.append(f"RESEND_API_KEY : {'✅ SET (' + str(len(RESEND_API_KEY)) + ' chars)' if RESEND_API_KEY else '❌ NOT SET'}")
+    lines.append(f"MAIL_FROM      : {MAIL_FROM}")
     lines.append("")
 
-    if not username or not password:
-        lines.append("❌ CANNOT TEST — credentials not set.")
-        lines.append("Add MAIL_USERNAME and MAIL_PASSWORD in Render → Environment.")
+    if not RESEND_API_KEY:
+        lines.append("❌ RESEND_API_KEY is not set.")
+        lines.append("")
+        lines.append("Steps to fix:")
+        lines.append("  1. Sign up free at https://resend.com")
+        lines.append("  2. Go to API Keys → Create API Key")
+        lines.append("  3. On Render: Environment → add  RESEND_API_KEY = re_xxxxxxxxxxxx")
+        lines.append("  4. Save → Render redeploys → emails will work")
     else:
-        # Attempt a real SMTP login
+        # Verify API key by listing domains (lightweight check)
         try:
-            ctx = ssl.create_default_context()
-            with smtplib.SMTP(server, port_num, timeout=10) as smtp:
-                smtp.ehlo()
-                if use_tls:
-                    smtp.starttls(context=ctx)
-                    smtp.ehlo()
-                smtp.login(username, password)
-            lines.append("✅ SMTP LOGIN SUCCESSFUL — credentials are correct!")
-            lines.append("If emails are not arriving, check Gmail Spam / Promotions folders.")
-        except smtplib.SMTPAuthenticationError as e:
-            lines.append(f"❌ AUTHENTICATION FAILED: {e}")
-            lines.append("")
-            lines.append("Fix: Use a Gmail App Password (16 chars, no spaces).")
-            lines.append("Steps:")
-            lines.append("  1. Go to https://myaccount.google.com/security")
-            lines.append("  2. Enable 2-Step Verification")
-            lines.append("  3. Search 'App passwords'")
-            lines.append("  4. Create one for Mail")
-            lines.append("  5. Paste the 16-char password (no spaces) into MAIL_PASSWORD on Render")
+            req = urllib.request.Request(
+                'https://api.resend.com/domains',
+                headers={'Authorization': f'Bearer {RESEND_API_KEY}'}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                lines.append("✅ RESEND_API_KEY is VALID — API connection successful!")
+                lines.append("")
+                lines.append("If emails are not arriving:")
+                lines.append("  • Check Gmail Spam / Promotions / All Mail folders")
+                lines.append("  • Search Gmail for:  from:onboarding@resend.dev")
+                lines.append("  • To send from your own address, verify your domain at resend.com/domains")
+        except urllib.error.HTTPError as e:
+            body_err = e.read().decode(errors='ignore')
+            if e.code == 401:
+                lines.append(f"❌ API KEY INVALID (401 Unauthorized)")
+                lines.append(f"   Response: {body_err[:200]}")
+                lines.append("")
+                lines.append("Fix: Go to Render → Environment → update RESEND_API_KEY with a valid key from resend.com")
+            else:
+                lines.append(f"⚠️ Resend API returned HTTP {e.code}: {body_err[:200]}")
         except Exception as e:
-            lines.append(f"❌ SMTP CONNECTION ERROR: {type(e).__name__}: {e}")
+            lines.append(f"❌ Failed to reach Resend API: {type(e).__name__}: {e}")
 
-    return "<pre style='font-family:monospace;font-size:15px;padding:20px'>" + "\n".join(lines) + "</pre>"
+    return "<pre style='font-family:monospace;font-size:15px;padding:20px;background:#111;color:#eee'>" + "\n".join(lines) + "</pre>"
 
 
 # ================= RUN APP =================
