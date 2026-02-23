@@ -1618,38 +1618,56 @@ def logout():
 # ================= EMAIL DIAGNOSTICS =================
 @app.route("/check-email-config")
 def check_email_config():
-    """Check email configuration and SMTP connectivity"""
-    config_status = {
-        "email_enabled": EMAIL_ENABLED,
-        "mail_server": app.config.get('MAIL_SERVER'),
-        "mail_port": app.config.get('MAIL_PORT'),
-        "mail_use_tls": app.config.get('MAIL_USE_TLS'),
-        "mail_username_set": bool(app.config.get('MAIL_USERNAME')),
-        "mail_password_set": bool(app.config.get('MAIL_PASSWORD')),
-        "username_preview": (app.config.get('MAIL_USERNAME', '')[:5] + '...') if app.config.get('MAIL_USERNAME') else "NOT SET",
-    }
-    
-    # Try to test email if configured
-    if EMAIL_ENABLED and mail:
-        try:
-            config_status["status"] = "✅ Email is properly configured"
-            config_status["message"] = "You can now send emails"
-        except Exception as e:
-            config_status["status"] = "⚠️ Email config found but connection test failed"
-            config_status["error"] = str(e)
+    """Live SMTP connection test — shows exact Gmail error in browser"""
+    import smtplib
+    import ssl
+
+    server   = app.config.get('MAIL_SERVER', 'smtp.gmail.com')
+    port_num = app.config.get('MAIL_PORT', 587)
+    username = app.config.get('MAIL_USERNAME') or ''
+    password = app.config.get('MAIL_PASSWORD') or ''
+    use_tls  = app.config.get('MAIL_USE_TLS', True)
+
+    lines = []
+    lines.append(f"EMAIL_ENABLED : {EMAIL_ENABLED}")
+    lines.append(f"MAIL_SERVER   : {server}")
+    lines.append(f"MAIL_PORT     : {port_num}")
+    lines.append(f"MAIL_USE_TLS  : {use_tls}")
+    lines.append(f"MAIL_USERNAME : {'✅ SET → ' + username[:4] + '***' if username else '❌ NOT SET'}")
+    lines.append(f"MAIL_PASSWORD : {'✅ SET (' + str(len(password)) + ' chars)' if password else '❌ NOT SET'}")
+    lines.append(f"DEFAULT_SENDER: {app.config.get('MAIL_DEFAULT_SENDER')}")
+    lines.append("")
+
+    if not username or not password:
+        lines.append("❌ CANNOT TEST — credentials not set.")
+        lines.append("Add MAIL_USERNAME and MAIL_PASSWORD in Render → Environment.")
     else:
-        config_status["status"] = "❌ Email NOT configured"
-        config_status["message"] = "Please add MAIL_USERNAME and MAIL_PASSWORD to Render environment variables"
-        config_status["next_steps"] = [
-            "Go to https://dashboard.render.com",
-            "Select your ai-proctoring service",
-            "Click Environment tab",
-            "Add MAIL_USERNAME = your-email@gmail.com",
-            "Add MAIL_PASSWORD = 16-char Gmail app password",
-            "Click Save (Render will auto-redeploy)"
-        ]
-    
-    return jsonify(config_status)
+        # Attempt a real SMTP login
+        try:
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP(server, port_num, timeout=10) as smtp:
+                smtp.ehlo()
+                if use_tls:
+                    smtp.starttls(context=ctx)
+                    smtp.ehlo()
+                smtp.login(username, password)
+            lines.append("✅ SMTP LOGIN SUCCESSFUL — credentials are correct!")
+            lines.append("If emails are not arriving, check Gmail Spam / Promotions folders.")
+        except smtplib.SMTPAuthenticationError as e:
+            lines.append(f"❌ AUTHENTICATION FAILED: {e}")
+            lines.append("")
+            lines.append("Fix: Use a Gmail App Password (16 chars, no spaces).")
+            lines.append("Steps:")
+            lines.append("  1. Go to https://myaccount.google.com/security")
+            lines.append("  2. Enable 2-Step Verification")
+            lines.append("  3. Search 'App passwords'")
+            lines.append("  4. Create one for Mail")
+            lines.append("  5. Paste the 16-char password (no spaces) into MAIL_PASSWORD on Render")
+        except Exception as e:
+            lines.append(f"❌ SMTP CONNECTION ERROR: {type(e).__name__}: {e}")
+
+    return "<pre style='font-family:monospace;font-size:15px;padding:20px'>" + "\n".join(lines) + "</pre>"
+
 
 # ================= RUN APP =================
 if __name__ == "__main__":
