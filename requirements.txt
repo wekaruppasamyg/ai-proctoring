@@ -12,3 +12,4 @@ flatbuffers>=23.5.26
 matplotlib>=3.7.1
 Pillow>=9.5.0
 psycopg2-binary==2.9.7
+Flask-Mail==0.9.1

@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, session, url_for, Response
+from flask_mail import Mail, Message
 import os
 import psycopg2
 import random
@@ -17,6 +18,16 @@ from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 app = Flask(__name__)
 app.secret_key = "exam-secret"
 os.makedirs("faces", exist_ok=True)
+
+# ================= EMAIL CONFIG =================
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', True)
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'wekaruppasamyg23@gmail.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'nuic knrf fkch poco')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@aiproctoring.com')
+
+mail = Mail(app)
 
 # ================= MJPEG STREAMING =================
 streams = {}
@@ -44,6 +55,161 @@ def upload_frame():
 @app.route('/mjpeg/<username>')
 def mjpeg_stream(username):
     return Response(gen_mjpeg(username), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+# ================= EMAIL FUNCTIONS =================
+
+def send_email(recipient, subject, body, html_body=None):
+    """Send email to recipient"""
+    try:
+        msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
+        mail.send(msg)
+        print(f"✉️ Email sent to {recipient}: {subject}")
+        return True
+    except Exception as e:
+        print(f"❌ Email send error: {e}")
+        return False
+
+def send_exam_start_email(username, email, subject_name, duration_minutes):
+    """Send email when student starts exam"""
+    subject = f"Exam Started: {subject_name}"
+    body = f"""
+Hello {username},
+
+Your exam has started!
+
+Subject: {subject_name}
+Duration: {duration_minutes} minutes
+Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Please ensure:
+- You have good lighting
+- Your camera is working
+- You are in a quiet environment
+- You look at the screen during the exam
+
+Good luck with your exam!
+
+Note: Any suspicious behavior will be recorded and reviewed.
+
+Best regards,
+AI Proctoring System
+"""
+    
+    html_body = f"""
+<html>
+  <body style="font-family: Arial, sans-serif; color: #333;">
+    <h2 style="color: #007bff;">Exam Started: {subject_name}</h2>
+    <p>Hello <strong>{username}</strong>,</p>
+    <p>Your exam has started!</p>
+    
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+      <p><strong>Subject:</strong> {subject_name}</p>
+      <p><strong>Duration:</strong> {duration_minutes} minutes</p>
+      <p><strong>Started at:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+    
+    <h4>Please ensure:</h4>
+    <ul>
+      <li>You have good lighting</li>
+      <li>Your camera is working</li>
+      <li>You are in a quiet environment</li>
+      <li>You look at the screen during the exam</li>
+    </ul>
+    
+    <p style="color: #28a745;"><strong>Good luck with your exam!</strong></p>
+    <p style="color: #666; font-size: 12px; margin-top: 30px;">
+      Note: Any suspicious behavior will be recorded and reviewed.<br>
+      AI Proctoring System
+    </p>
+  </body>
+</html>
+"""
+    return send_email(email, subject, body, html_body)
+
+def send_exam_completion_email(username, email, subject_name, score, total_questions, violations):
+    """Send email when exam is completed with score"""
+    percentage = (score / total_questions * 100) if total_questions > 0 else 0
+    
+    subject = f"Exam Completed: {subject_name} - Score: {score}/{total_questions}"
+    body = f"""
+Hello {username},
+
+Your exam has been completed!
+
+Subject: {subject_name}
+Your Score: {score} out of {total_questions}
+Percentage: {percentage:.2f}%
+Exam Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Violations Detected:
+- Looking Away: {violations.get('looking_away', 0)} times
+- Head Movement: {violations.get('head_movement', 0)} times
+- Eyes Not on Screen: {violations.get('eye_tracker', 0)} times
+- No Blink: {violations.get('no_blink', 0)} times
+- Hand Covering: {violations.get('hand_cover', 0)} times
+- Camera Hidden: {violations.get('camera_hidden', 0)} times
+
+Your results have been saved and will be reviewed by your instructor.
+
+Thank you for taking the exam!
+
+Best regards,
+AI Proctoring System
+"""
+    
+    html_body = f"""
+<html>
+  <body style="font-family: Arial, sans-serif; color: #333;">
+    <h2 style="color: #28a745;">Exam Completed!</h2>
+    <p>Hello <strong>{username}</strong>,</p>
+    <p>Your exam has been completed successfully.</p>
+    
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; text-align: center;">
+      <h3 style="color: #007bff; margin: 10px 0;">{subject_name}</h3>
+      <h2 style="color: #28a745; margin: 10px 0;">Score: {score}/{total_questions}</h2>
+      <h3 style="color: #666; margin: 10px 0;">{percentage:.2f}%</h3>
+      <p style="color: #999; font-size: 12px;">Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+    
+    <h4>Violations Detected During Exam:</h4>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr style="background-color: #f8f9fa;">
+        <td style="padding: 10px; border: 1px solid #ddd;"><strong>Violation Type</strong></td>
+        <td style="padding: 10px; border: 1px solid #ddd;"><strong>Count</strong></td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd;">Looking Away</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('looking_away', 0)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd;">Head Movement</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('head_movement', 0)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd;">Eyes Not on Screen</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('eye_tracker', 0)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd;">No Blink</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('no_blink', 0)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd;">Hand Covering</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('hand_cover', 0)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd;">Camera Hidden</td>
+        <td style="padding: 10px; border: 1px solid #ddd;">{violations.get('camera_hidden', 0)}</td>
+      </tr>
+    </table>
+    
+    <p style="margin-top: 20px; color: #666;">Your results have been saved and will be reviewed by your instructor.</p>
+    <p style="color: #28a745;"><strong>Thank you for taking the exam!</strong></p>
+    <p style="color: #999; font-size: 12px; margin-top: 30px;">AI Proctoring System</p>
+  </body>
+</html>
+"""
+    return send_email(email, subject, body, html_body)
 
 # ================= DATABASE INIT =================
 
@@ -412,6 +578,11 @@ def start_exam():
     if not enabled:
         return "This subject is currently locked. Please contact admin."
 
+    # Get student email
+    cur.execute("SELECT email FROM users WHERE username=%s", (session["username"],))
+    student_email_row = cur.fetchone()
+    student_email = student_email_row[0] if student_email_row else None
+
     # Get questions
     cur.execute(
         """
@@ -427,6 +598,11 @@ def start_exam():
     if not questions:
         return f"<h2>No questions found for {subject_name}</h2>"
 
+    # Send exam start email
+    if student_email:
+        duration_minutes = 60  # Default duration
+        send_exam_start_email(session["username"], student_email, subject_name, duration_minutes)
+
     # Initialize cheating and event tracking
     session['cheating_count'] = 0
     session['terminated'] = False
@@ -437,9 +613,15 @@ def start_exam():
     session['last_look_away_ts'] = 0  # reset debounce timer
     session['last_camera_hidden_ts'] = 0
     session['last_hand_cover_ts'] = 0
+    session['last_eye_tracker_ts'] = 0
+    session['last_head_movement_ts'] = 0
+    session['eye_tracker_count'] = 0
+    session['head_movement_count'] = 0
     # Blink tracking (only track no-blink events)
     session['no_blink_count'] = 0
     session['last_no_blink_ts'] = 0
+    # Store subject for later use
+    session['current_subject'] = subject_name
     return render_template("exam.html", questions=questions, subject=subject_name)
 
 @app.route("/monitor-exam", methods=["POST"])
@@ -656,6 +838,8 @@ def submit_exam():
     camera_hidden_count = session.get('camera_hidden_count', 0)
     hand_cover_count = session.get('hand_cover_count', 0)
     no_blink_count = session.get('no_blink_count', 0)
+    eye_tracker_count = session.get('eye_tracker_count', 0)
+    head_movement_count = session.get('head_movement_count', 0)
 
     if terminated:
         score = 0  # Or handle differently
@@ -663,6 +847,7 @@ def submit_exam():
     conn = get_db_connection()
     cur = conn.cursor()
 
+    total_questions = 0
     for qid in request.form:
         if qid == "subject":
             continue
@@ -672,6 +857,12 @@ def submit_exam():
 
         if int(request.form[qid]) == correct:
             score += 1
+        total_questions += 1
+
+    # Get student email
+    cur.execute("SELECT email FROM users WHERE username=%s", (username,))
+    student_email_row = cur.fetchone()
+    student_email = student_email_row[0] if student_email_row else None
 
     cur.execute(
         """
@@ -698,6 +889,18 @@ def submit_exam():
 
     conn.commit()
     conn.close()
+
+    # Send exam completion email with score
+    if student_email:
+        violations = {
+            'looking_away': looking_away_count,
+            'head_movement': head_movement_count,
+            'eye_tracker': eye_tracker_count,
+            'no_blink': no_blink_count,
+            'hand_cover': hand_cover_count,
+            'camera_hidden': camera_hidden_count
+        }
+        send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
 
     return render_template("exam_finished.html", score=score)
 
