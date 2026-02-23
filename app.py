@@ -506,6 +506,52 @@ def monitor_exam():
             session['last_no_blink_ts'] = now
         return {"status": "no_blink", "no_blink_count": session['no_blink_count']}
 
+    def increment_eye_tracker():
+        now = time()
+        if now - session.get('last_eye_tracker_ts', 0) >= 4.0:
+            session['eye_tracker_count'] = session.get('eye_tracker_count', 0) + 1
+            session['last_eye_tracker_ts'] = now
+            # Log event in camera_events table
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO camera_events (username, event_type, event_time, exam_subject) VALUES (%s, %s, NOW(), %s)",
+                    (
+                        session.get("username", "unknown"),
+                        "eye_tracker_violation",
+                        session.get("current_subject", "unknown"),
+                    ),
+                )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print("[Eye Tracker Event Log Error]", e)
+        return {"status": "eye_tracker", "eye_tracker_count": session['eye_tracker_count']}
+
+    def increment_head_movement():
+        now = time()
+        if now - session.get('last_head_movement_ts', 0) >= 4.0:
+            session['head_movement_count'] = session.get('head_movement_count', 0) + 1
+            session['last_head_movement_ts'] = now
+            # Log event in camera_events table
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO camera_events (username, event_type, event_time, exam_subject) VALUES (%s, %s, NOW(), %s)",
+                    (
+                        session.get("username", "unknown"),
+                        "head_movement_violation",
+                        session.get("current_subject", "unknown"),
+                    ),
+                )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print("[Head Movement Event Log Error]", e)
+        return {"status": "head_movement", "head_movement_count": session['head_movement_count']}
+
     if data.get("event") == "looking_away" and data.get("image") is None:
         return increment_look_away()
 
@@ -517,6 +563,12 @@ def monitor_exam():
 
     if data.get("event") == "no_blink":
         return increment_no_blink()
+
+    if data.get("event") == "eye_tracker_violation":
+        return increment_eye_tracker()
+
+    if data.get("event") == "head_movement_violation":
+        return increment_head_movement()
 
 
     img_data = data["image"].split(",")[1] if data.get("image") else None

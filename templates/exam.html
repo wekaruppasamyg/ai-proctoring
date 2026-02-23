@@ -298,6 +298,14 @@ header{
     ⚠️ No blink detected for 10 seconds — please blink!
 </div>
 
+<div id="eye-tracker-message" style="display:none;color:#ff6600;font-weight:bold;margin-top:10px;font-size:20px;padding:12px;background:#ffeecc;border-radius:8px;border-left:4px solid #ff6600;">
+    👀 EYES NOT ON SCREEN! Look at the exam!
+</div>
+
+<div id="head-movement-message" style="display:none;color:#ff0000;font-weight:bold;margin-top:10px;font-size:20px;padding:12px;background:#ffe6e6;border-radius:8px;border-left:4px solid #ff0000;">
+    ⚠️ HEAD MOVEMENT DETECTED! Keep your head steady!
+</div>
+
         </div>
 
         <!-- QUIZ -->
@@ -502,11 +510,22 @@ const cameraHiddenMessage = document.getElementById('camera-hidden-message');
 const handCoverMessage = document.getElementById('hand-cover-message');
 const handStatus = document.getElementById('hand-status');
 const blinkMessage = document.getElementById('blink-message');
+const eyeTrackerMessage = document.getElementById('eye-tracker-message');
+const headMovementMessage = document.getElementById('head-movement-message');
 const videoElement = document.getElementById('video');
 let lookingAwayFrames = 0;
 const LOOKING_AWAY_THRESHOLD = 15;
 let handCoverFrames = 0;
 const HAND_COVER_THRESHOLD = 30;
+
+// Eye tracking state
+let eyeTrackingFrames = 0;
+const EYE_TRACKING_THRESHOLD = 10;
+
+// Head movement state
+let headMovementFrames = 0;
+const HEAD_MOVEMENT_THRESHOLD = 12;
+let previousHeadPosition = null;
 
 // Blink detection state
 let lastBlinkTime = Date.now();
@@ -581,9 +600,138 @@ faceMesh.onResults(results => {
             console.warn('Blink detection error', e);
         }
 
+        // ===== EYE TRACKER =====
+        // Detect if eyes are looking away from screen
+        try {
+            const irisLeft = landmarks[468]; // Left iris
+            const irisRight = landmarks[473]; // Right iris
+            const leftEyeInner = landmarks[133];
+            const leftEyeOuter = landmarks[33];
+            const rightEyeInner = landmarks[362];
+            const rightEyeOuter = landmarks[263];
+            
+            // Calculate horizontal gaze ratio (0=looking left, 0.5=center, 1=looking right)
+            let leftGazeRatio = (irisLeft.x - leftEyeOuter.x) / (leftEyeInner.x - leftEyeOuter.x);
+            let rightGazeRatio = (irisRight.x - rightEyeOuter.x) / (rightEyeInner.x - rightEyeOuter.x);
+            let gazeRatio = (leftGazeRatio + rightGazeRatio) / 2;
+            
+            // Eyes not looking at screen if gaze is extreme
+            let eyesNotOnScreen = gazeRatio < 0.15 || gazeRatio > 0.85;
+            
+            // Also check vertical gaze
+            const leftEyeTop = landmarks[159];
+            const leftEyeBottom = landmarks[145];
+            const leftVerticalGaze = (irisLeft.y - leftEyeTop.y) / (leftEyeBottom.y - leftEyeTop.y);
+            
+            if (leftVerticalGaze < 0.1 || leftVerticalGaze > 0.9) {
+                eyesNotOnScreen = true;
+            }
+            
+            if (eyesNotOnScreen) {
+                eyeTrackingFrames++;
+            } else {
+                eyeTrackingFrames = 0;
+            }
+            
+            if (eyeTrackingFrames > EYE_TRACKING_THRESHOLD) {
+                eyeTrackerMessage.style.display = 'block';
+                fetch('/monitor-exam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event: 'eye_tracker_violation' })
+                }).catch(() => {});
+            } else {
+                eyeTrackerMessage.style.display = 'none';
+            }
+        } catch (e) {
+            console.warn('Eye tracker error', e);
+        }
+
+        // ===== HEAD MOVEMENT DETECTION =====
+        // Detect head tilt and movement using face landmarks
+        try {
+            const nose = landmarks[1];
+            const forehead = landmarks[10];
+            const chin = landmarks[152];
+            const leftCheek = landmarks[234];
+            const rightCheek = landmarks[454];
+            const leftEar = landmarks[234];
+            const rightEar = landmarks[454];
+            
+            // Calculate face center
+            const faceCenter = {
+                x: (leftCheek.x + rightCheek.x) / 2,
+                y: (forehead.y + chin.y) / 2,
+                z: (leftCheek.z + rightCheek.z) / 2
+            };
+            
+            // Calculate head pose angles
+            // Yaw: rotation left/right (based on ear position)
+            const yaw = Math.atan2(rightEar.x - leftEar.x, rightEar.z - leftEar.z);
+            
+            // Pitch: tilt up/down (based on forehead to chin distance)
+            const pitch = Math.atan2(chin.y - forehead.y, chin.z - forehead.z);
+            
+            // Roll: tilt side to side (eye positions)
+            const leftEyePos = landmarks[33];
+            const rightEyePos = landmarks[263];
+            const roll = Math.atan2(rightEyePos.y - leftEyePos.y, rightEyePos.x - leftEyePos.x);
+            
+            // Convert to degrees
+            const yawDeg = yaw * 180 / Math.PI;
+            const pitchDeg = pitch * 180 / Math.PI;
+            const rollDeg = roll * 180 / Math.PI;
+            
+            let headMoving = false;
+            
+            // Check if head is tilted excessively
+            if (Math.abs(yawDeg) > 25 || Math.abs(pitchDeg) > 25 || Math.abs(rollDeg) > 20) {
+                headMoving = true;
+            }
+            
+            // Also check for sudden position changes
+            if (previousHeadPosition) {
+                const positionChange = Math.sqrt(
+                    Math.pow(faceCenter.x - previousHeadPosition.x, 2) +
+                    Math.pow(faceCenter.y - previousHeadPosition.y, 2) +
+                    Math.pow(faceCenter.z - previousHeadPosition.z, 2)
+                );
+                
+                if (positionChange > 0.12) {
+                    headMoving = true;
+                }
+            }
+            
+            previousHeadPosition = { ...faceCenter };
+            
+            if (headMoving) {
+                headMovementFrames++;
+            } else {
+                headMovementFrames = Math.max(0, headMovementFrames - 1);
+            }
+            
+            if (headMovementFrames > HEAD_MOVEMENT_THRESHOLD) {
+                headMovementMessage.style.display = 'block';
+                fetch('/monitor-exam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event: 'head_movement_violation' })
+                }).catch(() => {});
+            } else {
+                headMovementMessage.style.display = 'none';
+            }
+        } catch (e) {
+            console.warn('Head movement detection error', e);
+        }
+
     } else {
         errorMessage.style.display = 'none';
         lookingAwayFrames = 0;
+        eyeTrackerMessage.style.display = 'none';
+        eyeTrackingFrames = 0;
+        headMovementMessage.style.display = 'none';
+        headMovementFrames = 0;
+        previousHeadPosition = null;
     }
 });
 
