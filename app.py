@@ -968,41 +968,37 @@ def submit_exam():
 
 @app.route("/test-email")
 def test_email():
-    """Test email configuration - send test email with detailed status"""
+    """Test email configuration - send test email with detailed status (Resend API)"""
     test_email_addr = request.args.get('email', 'test@example.com')
-    
-    # Check configuration
+
+    api_key_status = "✅ Set" if RESEND_API_KEY else "❌ NOT SET — add RESEND_API_KEY on Render"
+    test_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
     config_status = {
         "EMAIL_ENABLED": EMAIL_ENABLED,
-        "MAIL_SERVER": app.config.get('MAIL_SERVER', 'NOT SET'),
-        "MAIL_PORT": app.config.get('MAIL_PORT', 'NOT SET'),
-        "MAIL_USE_TLS": app.config.get('MAIL_USE_TLS', 'NOT SET'),
-        "MAIL_USERNAME": "✓ Set" if app.config.get('MAIL_USERNAME') else "✗ NOT SET",
-        "MAIL_PASSWORD": "✓ Set" if app.config.get('MAIL_PASSWORD') else "✗ NOT SET",
+        "RESEND_API_KEY": api_key_status,
+        "MAIL_FROM": MAIL_FROM,
         "Test Email": test_email_addr,
-        "Test Time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        "Test Time": test_time,
     }
     
-    subject = "🧪 AI Proctoring - Email Test"
+    subject = "🧪 AI Proctoring - Email Test (Resend)"
     body = f"""
-This is a test email from AI Proctoring System.
+AI Proctoring System - Test Email (Resend API)
 
-If you received this, email configuration is working correctly!
+If you received this, Resend is working correctly!
 
-Test Time: {config_status['Test Time']}
+Test Time: {test_time}
 
-Email Configuration:
-- EMAIL_ENABLED: {config_status['EMAIL_ENABLED']}
-- MAIL_SERVER: {config_status['MAIL_SERVER']}
-- MAIL_PORT: {config_status['MAIL_PORT']}
-- MAIL_USE_TLS: {config_status['MAIL_USE_TLS']}
-- MAIL_USERNAME: {config_status['MAIL_USERNAME']}
-- MAIL_PASSWORD: {config_status['MAIL_PASSWORD']}
+Configuration:
+- EMAIL_ENABLED: {EMAIL_ENABLED}
+- RESEND_API_KEY: {api_key_status}
+- MAIL_FROM: {MAIL_FROM}
 
-Troubleshooting:
-1. Check spam folder in Gmail
-2. Whitelist noreply@aiproctoring.com
-3. Check Render environment variables
+Troubleshooting if email is not arriving:
+1. Check spam / promotions / junk folder
+2. Verify RESEND_API_KEY is set on Render -> Environment
+3. Visit /check-email-config to validate the API key
 4. Check Render logs for errors
 
 Best regards,
@@ -1014,135 +1010,70 @@ AI Proctoring System
   <head>
     <style>
       body {{ font-family: Arial, sans-serif; color: #333; margin: 20px; }}
-      .success {{ color: #28a745; font-weight: bold; }}
-      .error {{ color: #dc3545; font-weight: bold; }}
-      .info {{ color: #007bff; }}
       table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
       th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
       th {{ background-color: #f8f9fa; }}
-      .config-box {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; font-family: monospace; }}
     </style>
   </head>
   <body>
-    <h2 style="color: #007bff;">🧪 AI Proctoring Email Test</h2>
-    
-    <div class="config-box">
-      <h3>📧 Email Configuration Status:</h3>
-      <table>
-        <tr>
-          <th>Setting</th>
-          <th>Value</th>
-          <th>Status</th>
-        </tr>
-        <tr>
-          <td>EMAIL_ENABLED</td>
-          <td>{config_status['EMAIL_ENABLED']}</td>
-          <td>{"✅" if config_status['EMAIL_ENABLED'] else "❌"}</td>
-        </tr>
-        <tr>
-          <td>MAIL_SERVER</td>
-          <td>{config_status['MAIL_SERVER']}</td>
-          <td>{"✅" if config_status['MAIL_SERVER'] != 'NOT SET' else "❌"}</td>
-        </tr>
-        <tr>
-          <td>MAIL_PORT</td>
-          <td>{config_status['MAIL_PORT']}</td>
-          <td>{"✅" if config_status['MAIL_PORT'] != 'NOT SET' else "❌"}</td>
-        </tr>
-        <tr>
-          <td>MAIL_USE_TLS</td>
-          <td>{config_status['MAIL_USE_TLS']}</td>
-          <td>{"✅" if config_status['MAIL_USE_TLS'] != 'NOT SET' else "❌"}</td>
-        </tr>
-        <tr>
-          <td>MAIL_USERNAME</td>
-          <td>{config_status['MAIL_USERNAME']}</td>
-          <td>{"✅" if "Set" in config_status['MAIL_USERNAME'] else "❌"}</td>
-        </tr>
-        <tr>
-          <td>MAIL_PASSWORD</td>
-          <td>{config_status['MAIL_PASSWORD']}</td>
-          <td>{"✅" if "Set" in config_status['MAIL_PASSWORD'] else "❌"}</td>
-        </tr>
-      </table>
-    </div>
-    
-    <div style="margin: 20px 0;">
-      <h3>📮 Test Email Details:</h3>
-      <p><strong>To:</strong> {test_email_addr}</p>
-      <p><strong>Subject:</strong> {subject}</p>
-      <p><strong>Time:</strong> {config_status['Test Time']}</p>
-    </div>
-    
-    <div style="margin: 20px 0; padding: 15px; border-left: 4px solid #007bff; background-color: #e7f3ff;">
-      <h3>❓ Email Not Arriving?</h3>
-      <ol>
-        <li><strong>Check Spam Folder</strong> - Email might be in spam/promotions</li>
-        <li><strong>Whitelist Sender</strong> - Add noreply@aiproctoring.com to contacts</li>
-        <li><strong>Check Configuration</strong> - All ✅ marks above should be present</li>
-        <li><strong>Verify Password</strong> - Gmail app password (16 chars, no spaces)</li>
-        <li><strong>Check Render Logs</strong> - Look for error messages</li>
-        <li><strong>Try Again</strong> - Sometimes takes 1-2 minutes</li>
-      </ol>
-    </div>
-    
-    <hr>
-    <p style="color: #999; font-size: 12px;">
-      If you need help, reply with:
-      - What you see when you visit /test-email
-      - Whether emails appear in spam
-      - Screenshot of Render environment variables
+    <h2 style="color: #007bff;">🧪 AI Proctoring — Resend API Test</h2>
+
+    <table>
+      <tr><th>Setting</th><th>Value</th></tr>
+      <tr><td>EMAIL_ENABLED</td><td>{"✅ True" if EMAIL_ENABLED else "❌ False"}</td></tr>
+      <tr><td>RESEND_API_KEY</td><td>{api_key_status}</td></tr>
+      <tr><td>MAIL_FROM</td><td>{MAIL_FROM}</td></tr>
+      <tr><td>Sent To</td><td>{test_email_addr}</td></tr>
+      <tr><td>Test Time</td><td>{test_time}</td></tr>
+    </table>
+
+    <p>✅ If you see this email, <strong>Resend is configured correctly</strong>.</p>
+    <p>If email is not arriving, visit
+      <a href="/check-email-config">/check-email-config</a> to validate your API key.
     </p>
   </body>
 </html>
 """
     
-    # For diagnostics, send synchronously so the page reflects real SMTP success/failure.
+    # For diagnostics, send synchronously so the page reflects real result.
     result = send_email(test_email_addr, subject, body, html_body, wait_for_result=True)
-    
-    # Return HTML status page
+
     status_html = f"""
 <html>
   <head>
     <style>
       body {{ font-family: Arial, sans-serif; margin: 30px; }}
-      .success {{ color: #28a745; font-size: 24px; font-weight: bold; }}
-      .error {{ color: #dc3545; font-size: 24px; font-weight: bold; }}
+      .success {{ color: #28a745; font-size: 22px; font-weight: bold; }}
+      .error {{ color: #dc3545; font-size: 22px; font-weight: bold; }}
       .box {{ background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; }}
     </style>
   </head>
   <body>
-    {"<div class='success'>✅ Test email SENT successfully!</div>" if result else "<div class='error'>❌ Failed to send test email</div>"}
-    
+    {"<div class='success'>✅ Test email SENT via Resend!</div>" if result else "<div class='error'>❌ Failed — check config below</div>"}
+
     <div class="box">
-      <h3>📧 Email Details:</h3>
-      <p><strong>Sent to:</strong> {test_email_addr}</p>
-      <p><strong>Subject:</strong> {subject}</p>
-      <p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+      <h3>⚙️ Resend Configuration:</h3>
+      <p><strong>EMAIL_ENABLED:</strong> {EMAIL_ENABLED}</p>
+      <p><strong>RESEND_API_KEY:</strong> {api_key_status}</p>
+      <p><strong>MAIL_FROM:</strong> {MAIL_FROM}</p>
+      <p><strong>Sent To:</strong> {test_email_addr}</p>
+      <p><strong>Time:</strong> {test_time}</p>
     </div>
-    
+
     <div class="box">
-      <h3>⚙️ Configuration Status:</h3>
-      <p>EMAIL_ENABLED: {config_status['EMAIL_ENABLED']}</p>
-      <p>MAIL_USERNAME: {config_status['MAIL_USERNAME']}</p>
-      <p>MAIL_PASSWORD: {config_status['MAIL_PASSWORD']}</p>
-      <p>MAIL_SERVER: {config_status['MAIL_SERVER']}</p>
-      <p>MAIL_PORT: {config_status['MAIL_PORT']}</p>
-    </div>
-    
-    <div class="box">
-      <h3>📋 What to do next:</h3>
+      <h3>📋 Troubleshooting:</h3>
       <ol>
-        <li>Check your email inbox (including spam folder)</li>
-        <li>If not received, check Render logs for errors</li>
-        <li>Verify all email variables are set on Render</li>
-        <li>Click <a href="/test-email?email={test_email_addr}">here to try again</a></li>
+        <li>Visit <a href="/check-email-config">/check-email-config</a> to validate your API key</li>
+        <li>Make sure <code>RESEND_API_KEY</code> is set on Render → Environment</li>
+        <li>Check spam / promotions folder</li>
+        <li>Get a free key at <a href="https://resend.com" target="_blank">resend.com</a></li>
+        <li><a href="/test-email?email={test_email_addr}">Try again</a></li>
       </ol>
     </div>
   </body>
 </html>
 """
-    
+
     return status_html
 
 
@@ -1334,8 +1265,8 @@ def send_result_email():
         # Check if email is configured
         if not EMAIL_ENABLED:
             return jsonify({
-                "status": "error", 
-                "message": "Email not configured. Add MAIL_USERNAME and MAIL_PASSWORD in Render environment."
+                "status": "error",
+                "message": "Email not configured. Add RESEND_API_KEY in Render → Environment. Get a free key at https://resend.com"
             })
         
         data = request.get_json(force=True, silent=True) or {}
@@ -1376,7 +1307,6 @@ def send_result_email():
         cur.execute("SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)", (subject,))
         total_q = cur.fetchone()
         total_questions = (total_q[0] if total_q else 0) or 20
-        
         conn.close()
         
         violations = {
@@ -1388,7 +1318,7 @@ def send_result_email():
             'camera_hidden': cam_hidden or 0
         }
         
-        # Always send in background thread — never block the request thread with SMTP.
+        # Queue in background thread — returns immediately.
         send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
         
         return jsonify({"status": "queued", "email": student_email})
@@ -1397,7 +1327,6 @@ def send_result_email():
         print(f"Error in send_result_email: {str(e)}")
         import traceback; traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)})
-        print(f"Error in send_result_email: {str(e)}")
         return jsonify({"status": "error", "message": str(e)})
 
 @app.route("/send-all-results-email", methods=["POST"])
@@ -1410,8 +1339,8 @@ def send_all_results_email():
         # Check if email is configured
         if not EMAIL_ENABLED:
             return jsonify({
-                "status": "error", 
-                "message": "Email not configured on server. Add MAIL_USERNAME and MAIL_PASSWORD environment variables on Render."
+                "status": "error",
+                "message": "Email not configured. Add RESEND_API_KEY in Render → Environment. Get a free key at https://resend.com"
             })
         
         conn = get_db_connection()
