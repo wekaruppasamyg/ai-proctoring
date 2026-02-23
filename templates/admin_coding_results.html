@@ -193,6 +193,11 @@ td:last-child{white-space:nowrap;}
 
 <!-- MAIN -->
 <div class="container">
+    <!-- CSV Upload Form -->
+    <form method="POST" action="/upload-csv" enctype="multipart/form-data">
+        <input type="file" name="csv_file" accept=".csv">
+        <button type="submit">Upload CSV</button>
+    </form>
 
     <div class="page-header">
         <div class="page-title"><i class="fas fa-code"></i> Coding Exam Results</div>

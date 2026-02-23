@@ -767,7 +767,7 @@ def admin_dashboard():
         subject_id, subject_name, enabled = subject
         cur.execute(
             "SELECT id, question, opt1, opt2, opt3, opt4, correct FROM questions WHERE subject_id=%s",
-            (subject_id,),
+            (subject_id,)
         )
         questions = cur.fetchall()
         # Prepare questions with correct answer text
