@@ -1238,10 +1238,28 @@ def delete_coding_result():
 def upload_csv_exam():
     file = request.files.get('csv_file')
     if file and file.filename.endswith('.csv'):
-        file.save('uploads/' + file.filename)  # Make sure 'uploads/' exists
+        upload_dir = 'uploads/'
+        os.makedirs(upload_dir, exist_ok=True)  # Ensure the directory exists
+        file.save(os.path.join(upload_dir, file.filename))
         # Optionally, process the CSV here
         return redirect('/coding-exam')  # Or wherever you want to redirect after upload
     return "No file uploaded or wrong file type", 400
+try:
+    data = np.loadtxt('stud_marks.csv', delimiter=',', skiprows=1, dtype=str)
+except FileNotFoundError:
+    print("File 'stud_marks.csv' not found. Creating sample data...")
+    # Create sample data as a numpy array
+    data = np.array([
+        ['Alice', '85', '90', '88'],
+        ['Bob', '78', '82', '80'],
+        ['Carol', '92', '95', '94']
+    ])
+    # Optionally, save the sample data as a CSV for future runs
+    np.savetxt('stud_marks.csv', data, delimiter=',', fmt='%s', header='Name,Math,Science,English', comments='')
+    print("Sample data created and saved as 'stud_marks.csv'.")
+
+print("LOADED DATA PREVIEW")
+print(data)
 # ================= RUN APP =================
 if __name__ == "__main__":
     init_db()

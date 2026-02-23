@@ -567,3 +567,38 @@ document.addEventListener("keydown", e => {
     <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
     <button type="submit">Upload CSV</button>
 </form>
+
+<!-- Add this to your coding_exam.html -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
+<script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+
+<div id="csvEditor" style="width: 100%;"></div>
+<button onclick="downloadCSV()">Download CSV</button>
+
+<script>
+  // Example: empty table with 5 rows and 4 columns
+  var data = [
+    ['', '', '', ''],
+    ['', '', '', ''],
+    ['', '', '', ''],
+    ['', '', '', ''],
+    ['', '', '', '']
+  ];
+
+  var container = document.getElementById('csvEditor');
+  var hot = new Handsontable(container, {
+    data: data,
+    rowHeaders: true,
+    colHeaders: true,
+    licenseKey: 'non-commercial-and-evaluation'
+  });
+
+  function downloadCSV() {
+    var exportPlugin = hot.getPlugin('exportFile');
+    exportPlugin.downloadFile('csv', {
+      filename: 'edited_csv',
+      columnHeaders: true,
+      rowHeaders: true
+    });
+  }
+</script>
