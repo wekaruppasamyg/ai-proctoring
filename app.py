@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session, url_for, Response
+from flask import Flask, render_template, request, redirect, session, url_for, Response, jsonify
 from flask_mail import Mail, Message
 import os
 import psycopg2
@@ -1288,92 +1288,49 @@ def admin_results():
 @app.route("/send-result-email", methods=["POST"])
 def send_result_email():
     """Admin sends result email to individual student"""
-    if not session.get("admin"):
-        return {"status": "unauthorized"}
-    
-    data = request.get_json()
-    result_id = data.get("result_id")
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Get result
-    cur.execute("""
-        SELECT username, subject, score, (SELECT COUNT(*) FROM questions WHERE subject_id = 
-        (SELECT id FROM subjects WHERE name = results.subject)) as total_questions
-        FROM results WHERE id=%s
-    """, (result_id,))
-    
-    result_row = cur.fetchone()
-    if not result_row:
-        conn.close()
-        return {"status": "not_found"}
-    
-    username, subject, score, total_questions = result_row
-    
-    # Get student email
-    cur.execute("SELECT email FROM users WHERE username=%s", (username,))
-    email_row = cur.fetchone()
-    
-    # Get violations
-    cur.execute("""
-        SELECT looking_away_count, head_movement_count, eye_tracker_count, 
-               no_blink_count, hand_cover_count, camera_hidden_count
-        FROM results WHERE id=%s
-    """, (result_id,))
-    
-    violations_row = cur.fetchone()
-    conn.close()
-    
-    if not email_row:
-        return {"status": "no_email"}
-    
-    student_email = email_row[0]
-    violations = {
-        'looking_away': violations_row[0] or 0,
-        'head_movement': violations_row[1] or 0,
-        'eye_tracker': violations_row[2] or 0,
-        'no_blink': violations_row[3] or 0,
-        'hand_cover': violations_row[4] or 0,
-        'camera_hidden': violations_row[5] or 0
-    } if violations_row else {}
-    
-    # Send email
-    send_exam_completion_email(username, student_email, subject, score, total_questions or 20, violations)
-    
-    return {"status": "sent", "email": student_email}
-
-@app.route("/send-all-results-email", methods=["POST"])
-def send_all_results_email():
-    """Admin sends result emails to all students"""
-    if not session.get("admin"):
-        return {"status": "unauthorized"}
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Get all results with student emails
-    cur.execute("""
-        SELECT r.id, r.username, r.subject, r.score, u.email,
-               r.looking_away_count, r.head_movement_count, r.eye_tracker_count,
-               r.no_blink_count, r.hand_cover_count, r.camera_hidden_count
-        FROM results r
-        JOIN users u ON r.username = u.username
-        WHERE u.email IS NOT NULL AND u.email != ''
-    """)
-    
-    results = cur.fetchall()
-    conn.close()
-    
-    sent_count = 0
-    for result_row in results:
-        result_id, username, subject, score, email, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden = result_row
+    try:
+        if not session.get("admin"):
+            return jsonify({"status": "unauthorized"})
         
-        # Get total questions for subject
+        data = request.get_json()
+        result_id = data.get("result_id")
+        
+        if not result_id:
+            return jsonify({"status": "error", "message": "result_id required"})
+        
         conn = get_db_connection()
         cur = conn.cursor()
+        
+        # Get result with violations
+        cur.execute("""
+            SELECT username, subject, score, 
+                   looking_away_count, head_movement_count, eye_tracker_count,
+                   no_blink_count, hand_cover_count, camera_hidden_count
+            FROM results WHERE id=%s
+        """, (result_id,))
+        
+        result_row = cur.fetchone()
+        if not result_row:
+            conn.close()
+            return jsonify({"status": "not_found"})
+        
+        username, subject, score, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden = result_row
+        
+        # Get student email
+        cur.execute("SELECT email FROM users WHERE username=%s", (username,))
+        email_row = cur.fetchone()
+        
+        if not email_row or not email_row[0]:
+            conn.close()
+            return jsonify({"status": "no_email"})
+        
+        student_email = email_row[0]
+        
+        # Get total questions for subject
         cur.execute("SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)", (subject,))
-        total_questions = cur.fetchone()[0] or 20
+        total_q = cur.fetchone()
+        total_questions = total_q[0] if total_q else 20
+        
         conn.close()
         
         violations = {
@@ -1386,10 +1343,67 @@ def send_all_results_email():
         }
         
         # Send email in background
-        send_exam_completion_email(username, email, subject, score, total_questions, violations)
-        sent_count += 1
+        send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
+        
+        return jsonify({"status": "sent", "email": student_email})
     
-    return {"status": "sent_all", "count": sent_count}
+    except Exception as e:
+        print(f"Error in send_result_email: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route("/send-all-results-email", methods=["POST"])
+def send_all_results_email():
+    """Admin sends result emails to all students"""
+    try:
+        if not session.get("admin"):
+            return jsonify({"status": "unauthorized"})
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get all results with student emails
+        cur.execute("""
+            SELECT r.id, r.username, r.subject, r.score, u.email,
+                   r.looking_away_count, r.head_movement_count, r.eye_tracker_count,
+                   r.no_blink_count, r.hand_cover_count, r.camera_hidden_count
+            FROM results r
+            JOIN users u ON r.username = u.username
+            WHERE u.email IS NOT NULL AND u.email != ''
+        """)
+        
+        results = cur.fetchall()
+        conn.close()
+        
+        sent_count = 0
+        for result_row in results:
+            result_id, username, subject, score, email, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden = result_row
+            
+            # Get total questions for subject
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)", (subject,))
+            total_q = cur.fetchone()
+            total_questions = total_q[0] if total_q else 20
+            conn.close()
+            
+            violations = {
+                'looking_away': look_away or 0,
+                'head_movement': head_move or 0,
+                'eye_tracker': eye_track or 0,
+                'no_blink': no_blink or 0,
+                'hand_cover': hand_cover or 0,
+                'camera_hidden': cam_hidden or 0
+            }
+            
+            # Send email in background
+            send_exam_completion_email(username, email, subject, score, total_questions, violations)
+            sent_count += 1
+        
+        return jsonify({"status": "sent_all", "count": sent_count})
+    
+    except Exception as e:
+        print(f"Error in send_all_results_email: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route("/delete-result", methods=["POST"])
 def delete_result():
