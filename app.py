@@ -1225,6 +1225,7 @@ def admin_coding_results():
 def delete_coding_result():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
+        return redirect(url_for("admin_login"))
     result_id = request.form["result_id"]
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1233,7 +1234,13 @@ def delete_coding_result():
     conn.close()
     return redirect(url_for("admin_coding_results"))
 
-
+@app.route('/upload-exam-file', methods=['POST'])
+def upload_exam_file():
+    file = request.files.get('student_file')
+    if file:
+        file.save('uploads/' + file.filename)  # Make sure 'uploads/' exists
+        return redirect('/')  # Or redirect to the exam page
+    return "No file uploaded", 400
 # ================= RUN APP =================
 if __name__ == "__main__":
     init_db()
