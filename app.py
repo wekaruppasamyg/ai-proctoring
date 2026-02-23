@@ -76,14 +76,19 @@ def send_email(recipient, subject, body, html_body=None):
         print(f"⚠️ Invalid email address: {recipient}")
         return False
     
-    try:
-        msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
-        mail.send(msg)
-        print(f"✉️ Email sent to {recipient}: {subject}")
-        return True
-    except Exception as e:
-        print(f"❌ Email send error to {recipient}: {e}")
-        return False
+    # Send email in background thread to prevent timeout
+    def _send_email_async():
+        try:
+            msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
+            mail.send(msg)
+            print(f"✉️ Email sent to {recipient}: {subject}")
+        except Exception as e:
+            print(f"❌ Email send error to {recipient}: {e}")
+    
+    # Start background thread for email sending
+    email_thread = threading.Thread(target=_send_email_async, daemon=True)
+    email_thread.start()
+    return True
 
 def send_exam_start_email(username, email, subject_name, duration_minutes):
     """Send email when student starts exam"""
