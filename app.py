@@ -268,6 +268,8 @@ def _normalize_database_url(db_url: str) -> str:
     parsed = urlparse(db_url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.setdefault("sslmode", os.environ.get("PGSSLMODE", "require"))
+    # Fail fast if DB is slow/unreachable, so requests return JSON errors instead of timing out.
+    query.setdefault("connect_timeout", os.environ.get("PGCONNECT_TIMEOUT", "5"))
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 def get_db_connection():

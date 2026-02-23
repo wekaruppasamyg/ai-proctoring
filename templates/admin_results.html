@@ -422,7 +422,7 @@ function sendResultEmail(resultId){
         .then(async (r) => {
             const text = await r.text();
             if(!text){
-                throw new Error('Empty response from server (timeout or crash).');
+                throw new Error('Empty response from server (HTTP ' + r.status + '). Timeout or proxy error.');
             }
             try {
                 return JSON.parse(text);
@@ -459,7 +459,7 @@ function sendAllResultsEmails(){
         .then(async (r) => {
             const text = await r.text();
             if(!text){
-                throw new Error('Empty response from server (timeout or crash).');
+                throw new Error('Empty response from server (HTTP ' + r.status + '). Timeout or proxy error.');
             }
             try {
                 return JSON.parse(text);
