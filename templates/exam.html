@@ -520,7 +520,8 @@ const HAND_COVER_THRESHOLD = 30;
 
 // Eye tracking state
 let eyeTrackingFrames = 0;
-const EYE_TRACKING_THRESHOLD = 10;
+const EYE_TRACKING_THRESHOLD = 60; // 2 seconds at 30fps for stricter accuracy
+let eyeViolationLogged = false; // Prevent duplicate logging
 
 // Head movement state
 let headMovementFrames = 0;
@@ -615,31 +616,42 @@ faceMesh.onResults(results => {
             let rightGazeRatio = (irisRight.x - rightEyeOuter.x) / (rightEyeInner.x - rightEyeOuter.x);
             let gazeRatio = (leftGazeRatio + rightGazeRatio) / 2;
             
-            // Eyes not looking at screen if gaze is extreme
-            let eyesNotOnScreen = gazeRatio < 0.15 || gazeRatio > 0.85;
+            // Stricter detection: eyes must be VERY far off-center (10%-90% range only)
+            let eyesNotOnScreen = gazeRatio < 0.10 || gazeRatio > 0.90;
             
-            // Also check vertical gaze
+            // Also check vertical gaze (stricter: 5%-95%)
             const leftEyeTop = landmarks[159];
             const leftEyeBottom = landmarks[145];
             const leftVerticalGaze = (irisLeft.y - leftEyeTop.y) / (leftEyeBottom.y - leftEyeTop.y);
             
-            if (leftVerticalGaze < 0.1 || leftVerticalGaze > 0.9) {
+            if (leftVerticalGaze < 0.05 || leftVerticalGaze > 0.95) {
                 eyesNotOnScreen = true;
             }
             
             if (eyesNotOnScreen) {
                 eyeTrackingFrames++;
             } else {
+                // Eyes back on screen - only count if we logged a violation
+                if (eyeViolationLogged && eyeTrackingFrames > EYE_TRACKING_THRESHOLD) {
+                    // Violation was already logged, now resetting
+                    eyeViolationLogged = false;
+                }
                 eyeTrackingFrames = 0;
             }
             
+            // Only show warning and log ONCE when threshold exceeded
             if (eyeTrackingFrames > EYE_TRACKING_THRESHOLD) {
                 eyeTrackerMessage.style.display = 'block';
-                fetch('/monitor-exam', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ event: 'eye_tracker_violation' })
-                }).catch(() => {});
+                
+                // Log to backend only once per violation
+                if (!eyeViolationLogged) {
+                    eyeViolationLogged = true;
+                    fetch('/monitor-exam', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event: 'eye_tracker_violation' })
+                    }).catch(() => {});
+                }
             } else {
                 eyeTrackerMessage.style.display = 'none';
             }
@@ -729,6 +741,7 @@ faceMesh.onResults(results => {
         lookingAwayFrames = 0;
         eyeTrackerMessage.style.display = 'none';
         eyeTrackingFrames = 0;
+        eyeViolationLogged = false;
         headMovementMessage.style.display = 'none';
         headMovementFrames = 0;
         previousHeadPosition = null;

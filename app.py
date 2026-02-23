@@ -508,7 +508,7 @@ def monitor_exam():
 
     def increment_eye_tracker():
         now = time()
-        if now - session.get('last_eye_tracker_ts', 0) >= 4.0:
+        if now - session.get('last_eye_tracker_ts', 0) >= 2.5:
             session['eye_tracker_count'] = session.get('eye_tracker_count', 0) + 1
             session['last_eye_tracker_ts'] = now
             # Log event in camera_events table
