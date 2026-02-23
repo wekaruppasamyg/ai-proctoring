@@ -1417,57 +1417,69 @@ def send_all_results_email():
         
         conn = get_db_connection()
         cur = conn.cursor()
-        
+
         # Get all results with student emails
         cur.execute("""
-            SELECT r.id, r.username, r.subject, r.score, u.email,
+            SELECT r.username, r.subject, r.score, u.email,
                    r.looking_away_count, r.head_movement_count, r.eye_tracker_count,
                    r.no_blink_count, r.hand_cover_count, r.camera_hidden_count
             FROM results r
             JOIN users u ON r.username = u.username
             WHERE u.email IS NOT NULL AND u.email != ''
         """)
-        
-        results = cur.fetchall()
-        conn.close()
-        
-        sent_count = 0
-        failed_count = 0
-        for result_row in results:
-            result_id, username, subject, score, email, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden = result_row
-            
-            # Get total questions for subject
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)", (subject,))
-            total_q = cur.fetchone()
-            total_questions = total_q[0] if total_q else 20
-            conn.close()
-            
-            violations = {
-                'looking_away': look_away or 0,
-                'head_movement': head_move or 0,
-                'eye_tracker': eye_track or 0,
-                'no_blink': no_blink or 0,
-                'hand_cover': hand_cover or 0,
-                'camera_hidden': cam_hidden or 0
-            }
-            
-            ok = send_exam_completion_email(
-                username,
-                email,
-                subject,
-                score,
-                total_questions,
-                violations,
-                wait_for_result=True,
-            )
-            if ok:
-                sent_count += 1
-            else:
-                failed_count += 1
 
-        return jsonify({"status": "sent_all", "count": sent_count, "failed": failed_count})
+        rows = cur.fetchall()
+        conn.close()
+
+        # Fire-and-forget background job. Bulk sending can take long and may exceed request timeouts.
+        def _send_bulk_async(batch_rows):
+            try:
+                subject_total_cache = {}
+
+                for (username, subject, score, email, look_away, head_move, eye_track, no_blink, hand_cover, cam_hidden) in batch_rows:
+                    if subject not in subject_total_cache:
+                        try:
+                            conn2 = get_db_connection()
+                            cur2 = conn2.cursor()
+                            cur2.execute(
+                                "SELECT COUNT(*) FROM questions WHERE subject_id = (SELECT id FROM subjects WHERE name=%s)",
+                                (subject,),
+                            )
+                            total_q = cur2.fetchone()
+                            subject_total_cache[subject] = (total_q[0] if total_q else 20) or 20
+                            conn2.close()
+                        except Exception as e:
+                            print(f"⚠️ Failed to load question count for subject '{subject}': {e}")
+                            subject_total_cache[subject] = 20
+
+                    total_questions = subject_total_cache.get(subject, 20)
+                    violations = {
+                        'looking_away': look_away or 0,
+                        'head_movement': head_move or 0,
+                        'eye_tracker': eye_track or 0,
+                        'no_blink': no_blink or 0,
+                        'hand_cover': hand_cover or 0,
+                        'camera_hidden': cam_hidden or 0,
+                    }
+
+                    # Synchronous inside background thread = accurate logs, no request timeout.
+                    send_exam_completion_email(
+                        username,
+                        email,
+                        subject,
+                        score,
+                        total_questions,
+                        violations,
+                        wait_for_result=True,
+                    )
+            except Exception as e:
+                print(f"❌ Bulk email job failed: {e}")
+                import traceback
+                traceback.print_exc()
+
+        threading.Thread(target=_send_bulk_async, args=(rows,), daemon=True).start()
+
+        return jsonify({"status": "queued", "count": len(rows)})
     
     except Exception as e:
         print(f"Error in send_all_results_email: {str(e)}")

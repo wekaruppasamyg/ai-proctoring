@@ -419,7 +419,17 @@ function sendResultEmail(resultId){
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ result_id: resultId })
         })
-        .then(r => r.json())
+        .then(async (r) => {
+            const text = await r.text();
+            if(!text){
+                throw new Error('Empty response from server (timeout or crash).');
+            }
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error('Non-JSON response from server: ' + text.slice(0, 200));
+            }
+        })
         .then(data => {
             if(data.status === 'sent'){
                 alert('✅ Result email sent to ' + data.email);
@@ -446,9 +456,21 @@ function sendAllResultsEmails(){
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({})
         })
-        .then(r => r.json())
+        .then(async (r) => {
+            const text = await r.text();
+            if(!text){
+                throw new Error('Empty response from server (timeout or crash).');
+            }
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error('Non-JSON response from server: ' + text.slice(0, 200));
+            }
+        })
         .then(data => {
-            if(data.status === 'sent_all'){
+            if(data.status === 'queued'){
+                alert('✅ Queued ' + data.count + ' result emails.\n\nDelivery may take 1-2 minutes. Check Spam/Promotions.');
+            } else if(data.status === 'sent_all'){
                 if(typeof data.failed === 'number' && data.failed > 0){
                     alert('⚠️ Sent ' + data.count + ' emails. Failed: ' + data.failed + '.\n\nCheck Render logs and Spam/Promotions.');
                 } else {
