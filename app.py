@@ -22,12 +22,20 @@ os.makedirs("faces", exist_ok=True)
 # ================= EMAIL CONFIG =================
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', True)
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() in ['true', '1', 'yes']
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'wekaruppasamyg23@gmail.com')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'nuic knrf fkch poco')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@aiproctoring.com')
+app.config['MAIL_SUPPRESS_SEND'] = False
 
-mail = Mail(app)
+# Check if email is configured
+EMAIL_ENABLED = bool(os.environ.get('MAIL_USERNAME') and os.environ.get('MAIL_PASSWORD'))
+
+try:
+    mail = Mail(app)
+except Exception as e:
+    print(f"⚠️ Email service not initialized: {e}")
+    mail = None
 
 # ================= MJPEG STREAMING =================
 streams = {}
@@ -59,14 +67,22 @@ def mjpeg_stream(username):
 # ================= EMAIL FUNCTIONS =================
 
 def send_email(recipient, subject, body, html_body=None):
-    """Send email to recipient"""
+    """Send email to recipient (graceful if email not configured)"""
+    if not EMAIL_ENABLED or not mail:
+        print(f"⏭️ Email not configured - skipping: {subject}")
+        return False
+    
+    if not recipient or '@' not in str(recipient):
+        print(f"⚠️ Invalid email address: {recipient}")
+        return False
+    
     try:
         msg = Message(subject=subject, recipients=[recipient], body=body, html=html_body)
         mail.send(msg)
         print(f"✉️ Email sent to {recipient}: {subject}")
         return True
     except Exception as e:
-        print(f"❌ Email send error: {e}")
+        print(f"❌ Email send error to {recipient}: {e}")
         return False
 
 def send_exam_start_email(username, email, subject_name, duration_minutes):
@@ -903,6 +919,69 @@ def submit_exam():
         send_exam_completion_email(username, student_email, subject, score, total_questions, violations)
 
     return render_template("exam_finished.html", score=score)
+
+
+# ================= EMAIL TEST =================
+
+@app.route("/test-email")
+def test_email():
+    """Test email configuration - send test email"""
+    test_email_addr = request.args.get('email', 'test@example.com')
+    
+    subject = "🧪 AI Proctoring - Email Test"
+    body = f"""
+This is a test email from AI Proctoring System.
+
+If you received this, email configuration is working correctly!
+
+Test Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Email Status:
+- EMAIL_ENABLED: {EMAIL_ENABLED}
+- MAIL_SERVER: {app.config['MAIL_SERVER']}
+- MAIL_PORT: {app.config['MAIL_PORT']}
+- MAIL_USE_TLS: {app.config['MAIL_USE_TLS']}
+- MAIL_USERNAME: {"✓ Set" if app.config['MAIL_USERNAME'] else "✗ Not Set"}
+- MAIL_PASSWORD: {"✓ Set" if app.config['MAIL_PASSWORD'] else "✗ Not Set"}
+
+Best regards,
+AI Proctoring System
+"""
+
+    html_body = f"""
+<html>
+  <body style="font-family: Arial, sans-serif; color: #333;">
+    <h2 style="color: #007bff;">🧪 Email Test Successful!</h2>
+    <p>This is a test email from <strong>AI Proctoring System</strong>.</p>
+    <p style="color: #28a745;"><strong>If you received this, email configuration is working!</strong></p>
+    
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; font-family: monospace; font-size: 12px;">
+      <p><strong>Email Configuration Status:</strong></p>
+      <p>EMAIL_ENABLED: {EMAIL_ENABLED}</p>
+      <p>MAIL_SERVER: {app.config['MAIL_SERVER']}</p>
+      <p>MAIL_PORT: {app.config['MAIL_PORT']}</p>
+      <p>MAIL_USE_TLS: {app.config['MAIL_USE_TLS']}</p>
+      <p>MAIL_USERNAME: {"✓ Set" if app.config['MAIL_USERNAME'] else "✗ Not Set"}</p>
+      <p>Test Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+    
+    <p style="color: #999; font-size: 12px; margin-top: 30px;">AI Proctoring System</p>
+  </body>
+</html>
+"""
+    
+    result = send_email(test_email_addr, subject, body, html_body)
+    
+    if result:
+        return f"✅ Test email sent to {test_email_addr}. Check your inbox!"
+    else:
+        return f"❌ Failed to send test email. Check email configuration:<br>" \
+               f"EMAIL_ENABLED: {EMAIL_ENABLED}<br>" \
+               f"MAIL_USERNAME: {app.config['MAIL_USERNAME']}<br>" \
+               f"MAIL_PASSWORD: {'Set' if app.config['MAIL_PASSWORD'] else 'NOT SET'}<br>" \
+               f"MAIL_SERVER: {app.config['MAIL_SERVER']}<br>" \
+               f"MAIL_PORT: {app.config['MAIL_PORT']}<br>" \
+               f"Check Render logs for details."
 
 
 # ================= ADMIN =================
