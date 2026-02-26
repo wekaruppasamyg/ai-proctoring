@@ -28,7 +28,8 @@ os.makedirs("faces", exist_ok=True)
 # TO USE: Enable "Less secure app access" OR use App Password for Gmail
 # Generate App Password: Google Account > Security > 2-Step Verification > App passwords
 EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
+EMAIL_PORT = 465  # SSL port (more likely to work on Render)
+EMAIL_USE_SSL = True
 EMAIL_ADDRESS = "sanjayganesan946@gmail.com"  # Replace with your email
 EMAIL_PASSWORD = "bllhjzqkmfgdncoc"     # Replace with your app password
 
@@ -66,8 +67,13 @@ def send_otp_email(to_email, otp):
         
         msg.attach(MIMEText(body, 'html'))
         
-        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=30)
-        server.starttls()
+        # Use SSL for port 465
+        if EMAIL_USE_SSL:
+            server = smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=30)
+        else:
+            server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=30)
+            server.starttls()
+        
         server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
         server.send_message(msg)
         server.quit()
