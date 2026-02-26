@@ -32,6 +32,7 @@ p{text-align:center;font-size:14px;color:#9ca3af;margin-bottom:32px;}
     <p>Select a programming language to begin your coding examination</p>
 
     <form method="POST" action="/coding-exam" id="langForm">
+
         <input type="hidden" name="language" id="langInput" value="Python">
 
         <div class="lang-grid">
@@ -51,6 +52,17 @@ p{text-align:center;font-size:14px;color:#9ca3af;margin-bottom:32px;}
                 <span class="emoji">🐘</span>
                 <span>PHP</span>
             </div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+            <label for="csv_file">Select a CSV file for your exam:</label>
+            <select name="csv_file" id="csv_file" required>
+                <option value="iris.csv">iris.csv</option>
+                <option value="Titanic_Train.csv">Titanic_Train.csv</option>
+                <option value="stu_marks.csv">stu_marks.csv</option>
+                <option value="customer_Transaction.csv">customer_Transaction.csv</option>
+                <option value="customer_Demograph.csv">customer_Demograph.csv</option>
+            </select>
         </div>
 
         <button type="submit" class="start-btn">🚀 Start Coding Exam</button>

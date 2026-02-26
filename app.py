@@ -1,4 +1,4 @@
-﻿from flask import Flask, render_template, request, redirect, session, url_for, Response, jsonify
+﻿from flask import Flask, render_template, request, redirect, session, url_for, Response, jsonify, flash
 import os
 import psycopg2
 import random
@@ -8,18 +8,73 @@ import shutil
 import subprocess
 import tempfile
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 import cv2
 import numpy as np
 from time import time
 import threading
 from werkzeug.utils import secure_filename
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # ================= APP CONFIG =================
 app = Flask(__name__)
 app.secret_key = "exam-secret"
 os.makedirs("faces", exist_ok=True)
+
+# ================= EMAIL CONFIG (Gmail SMTP) =================
+# TO USE: Enable "Less secure app access" OR use App Password for Gmail
+# Generate App Password: Google Account > Security > 2-Step Verification > App passwords
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_ADDRESS = "sanjayganesan946@gmail.com"  # Replace with your email
+EMAIL_PASSWORD = "bllhjzqkmfgdncoc"     # Replace with your app password
+
+# OTP Storage: {email: {"otp": "123456", "expires": datetime}}
+otp_storage = {}
+
+def generate_otp():
+    """Generate a 6-digit OTP"""
+    return ''.join(random.choices(string.digits, k=6))
+
+def send_otp_email(to_email, otp):
+    """Send OTP email to user"""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = to_email
+        msg['Subject'] = "🔐 AI Proctor - Password Reset OTP"
+        
+        body = f"""
+        <html>
+        <body style="font-family: 'Poppins', Arial, sans-serif; background: #f4f4f4; padding: 30px;">
+            <div style="max-width: 500px; margin: auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
+                <h2 style="color: #8b5cf6; text-align: center; margin-bottom: 10px;">🔐 Password Reset</h2>
+                <p style="color: #666; text-align: center;">You requested to reset your password for AI Proctor.</p>
+                <div style="background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; padding: 25px; border-radius: 12px; text-align: center; margin: 25px 0;">
+                    <p style="margin: 0; font-size: 14px; opacity: 0.9;">Your OTP Code</p>
+                    <h1 style="margin: 10px 0 0 0; font-size: 36px; letter-spacing: 8px;">{otp}</h1>
+                </div>
+                <p style="color: #999; text-align: center; font-size: 13px;">This OTP will expire in <strong>10 minutes</strong>.</p>
+                <p style="color: #999; text-align: center; font-size: 12px; margin-top: 20px;">If you didn't request this, please ignore this email.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Email error: {e}")
+        return False
 
 # ================= MJPEG STREAMING =================
 streams = {}
@@ -366,7 +421,104 @@ def login_check():
     return "Login Failed"
 
 
+# ================= FORGOT PASSWORD / OTP RESET =================
+@app.route("/forgot-password")
+def forgot_password():
+    return render_template("forgot_password.html")
 
+
+@app.route("/send-otp", methods=["POST"])
+def send_otp():
+    email = request.form.get("email", "").strip()
+    
+    if not email:
+        return render_template("forgot_password.html", error="Please enter your email address")
+    
+    # Check if email exists in database
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT username FROM users WHERE email=%s", (email,))
+    user = cur.fetchone()
+    conn.close()
+    
+    if not user:
+        return render_template("forgot_password.html", error="No account found with this email address")
+    
+    # Generate OTP and store with expiry
+    otp = generate_otp()
+    otp_storage[email] = {
+        "otp": otp,
+        "expires": datetime.now() + timedelta(minutes=10),
+        "username": user[0]
+    }
+    
+    # Send OTP via email
+    if send_otp_email(email, otp):
+        return render_template("forgot_password.html", 
+                             success="OTP sent to your email! Check your inbox.",
+                             email=email,
+                             show_otp_form=True)
+    else:
+        return render_template("forgot_password.html", 
+                             error="Failed to send OTP. Please check email configuration or try again.")
+
+
+@app.route("/verify-otp", methods=["POST"])
+def verify_otp():
+    email = request.form.get("email", "").strip()
+    entered_otp = request.form.get("otp", "").strip()
+    
+    if email not in otp_storage:
+        return render_template("forgot_password.html", error="OTP expired or invalid. Please request a new one.")
+    
+    stored = otp_storage[email]
+    
+    # Check expiry
+    if datetime.now() > stored["expires"]:
+        del otp_storage[email]
+        return render_template("forgot_password.html", error="OTP has expired. Please request a new one.")
+    
+    # Verify OTP
+    if entered_otp != stored["otp"]:
+        return render_template("forgot_password.html", 
+                             error="Invalid OTP. Please try again.",
+                             email=email,
+                             show_otp_form=True)
+    
+    # OTP verified - show reset password form
+    return render_template("reset_password.html", email=email, username=stored["username"])
+
+
+@app.route("/reset-password", methods=["POST"])
+def reset_password():
+    email = request.form.get("email", "").strip()
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+    
+    if not new_password or not confirm_password:
+        return render_template("reset_password.html", email=email, error="Please fill in all fields")
+    
+    if new_password != confirm_password:
+        return render_template("reset_password.html", email=email, error="Passwords do not match")
+    
+    if len(new_password) < 6:
+        return render_template("reset_password.html", email=email, error="Password must be at least 6 characters")
+    
+    # Update password in database
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET password=%s WHERE email=%s", (new_password, email))
+        conn.commit()
+        conn.close()
+        
+        # Clear OTP storage
+        if email in otp_storage:
+            del otp_storage[email]
+        
+        return render_template("login.html", success="Password reset successful! Please login with your new password.")
+    except Exception as e:
+        return render_template("reset_password.html", email=email, error=f"Error updating password: {str(e)}")
 
 
 # 8. Student Dashboard
@@ -707,6 +859,27 @@ def submit_exam():
             score += 1
         total_questions += 1
 
+    # ===== MALPRACTICE PENALTY SYSTEM =====
+    # Calculate total malpractice violations
+    total_malpractice = (
+        cheating_count + 
+        looking_away_count + 
+        tab_switch_count + 
+        camera_hidden_count + 
+        hand_cover_count + 
+        no_blink_count + 
+        eye_tracker_count + 
+        head_movement_count
+    )
+    
+    # If total malpractice > 2, deduct 2 marks
+    original_score = score
+    penalty_applied = 0
+    if total_malpractice > 2 and not terminated:
+        penalty_applied = 2
+        score = max(0, score - 2)  # Ensure score doesn't go below 0
+    # ===== END MALPRACTICE PENALTY =====
+
     cur.execute(
         """
         INSERT INTO results(
@@ -736,7 +909,25 @@ def submit_exam():
     conn.commit()
     conn.close()
 
-    return render_template("exam_finished.html", score=score)
+    return render_template(
+        "exam_finished.html",
+        score=score,
+        original_score=original_score,
+        penalty_applied=penalty_applied,
+        total_malpractice=total_malpractice,
+        total_questions=total_questions,
+        subject=subject,
+        username=username,
+        cheating_count=cheating_count,
+        terminated=terminated,
+        looking_away_count=looking_away_count,
+        tab_switch_count=tab_switch_count,
+        camera_hidden_count=camera_hidden_count,
+        hand_cover_count=hand_cover_count,
+        no_blink_count=no_blink_count,
+        eye_tracker_count=eye_tracker_count,
+        head_movement_count=head_movement_count
+    )
 
 
 # ================= ADMIN =================
@@ -1067,7 +1258,9 @@ def coding_exam():
 
     if request.method == "POST":
         language = request.form.get("language", "Python")
+        csv_file = request.form.get("csv_file", "")
         session['coding_language'] = language
+        session['coding_csv_file'] = csv_file
         # Reset monitoring counters for coding exam
         session['cheating_count'] = 0
         session['terminated'] = False
@@ -1085,7 +1278,7 @@ def coding_exam():
         session['no_blink_count'] = 0
         session['last_no_blink_ts'] = 0
         session['current_subject'] = f"Coding-{language}"
-        return render_template("coding_exam.html", language=language, username=session["username"])
+        return render_template("coding_exam.html", language=language, username=session["username"], csv_file=csv_file)
 
     return render_template("coding_exam_select.html", languages=CODING_LANGUAGES)
 

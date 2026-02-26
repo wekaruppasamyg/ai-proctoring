@@ -296,6 +296,12 @@ header{
 
         <h3>Login</h3>
 
+        {% if success %}
+        <div style="background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #10b981; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;">
+            ✅ {{ success }}
+        </div>
+        {% endif %}
+
         <form action="/login" method="post">
             <input type="text" name="username" placeholder="Username" required>
             <input type="password" name="password" placeholder="Password" required>
@@ -303,8 +309,12 @@ header{
             <button type="submit">Login</button>
         </form>
 
+        <div class="forgot-link">
+            Forgot password? <a href="/forgot-password">Reset here</a>
+        </div>
+
         <div class="register-link">
-            Already have an account? <a href="/register">Register</a>
+            Don't have an account? <a href="/register">Register</a>
         </div>
     </div>
 </div>

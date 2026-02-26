@@ -1,0 +1,3 @@
+transaction_id,product_id,customer_id,transaction_date,online_order,order_status,brand,product_line,product_class,product_size,list_price,standard_cost,product_first_sold_date
+1,2,2950,25-02-2017,FALSE,Approved,Solex,Standard,medium,medium,71.49,$53.62,41245
+2,3,3120,21-05-2017,TRUE,Approved,Trek Bicycles,Standard,medium,large,2091.47,$388.92,41701

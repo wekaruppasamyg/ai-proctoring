@@ -1,0 +1,3 @@
+customer_id,gender,past_3_years_bike_related_purchases,DOB,job_title,job_industry_category,wealth_segment,deceased_indicator,owns_car,tenure,address,postcode,state,country,property_valuation
+1,Female,0,20-08-1954,Retiree,Health,Mass Customer,N,N,11,3097 Anglim Pl,2116,NSW,Australia,9
+2,Female,0,06-10-1980,Executive,Financial Services,Affluent Customer,N,N,16,5 Chaffey Way,5024,SA,Australia,11

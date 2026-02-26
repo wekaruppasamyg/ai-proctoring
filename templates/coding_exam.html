@@ -5,6 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Coding Exam – {{ language }} | AI Proctor</title>
 
+{% if csv_file %}
+<style>
+.csv-preview-box {
+    background: #232946;
+    color: #e5e7eb;
+    border: 1px solid #8b5cf6;
+    border-radius: 10px;
+    padding: 16px;
+    margin: 18px 0 0 0;
+    font-size: 14px;
+    max-height: 200px;
+    overflow: auto;
+}
+</style>
+{% endif %}
+
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 <!-- CodeMirror -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
@@ -217,6 +233,13 @@ header{
 </head>
 <body>
 
+{% if csv_file %}
+<div class="csv-preview-box">
+    <b>CSV File for Exam:</b> {{ csv_file }}<br>
+    <pre id="csv-preview" data-csv-file="{{ csv_file }}">Loading preview...</pre>
+</div>
+{% endif %}
+
 <!-- HEADER -->
 <header>
     <div class="logo">
@@ -316,8 +339,55 @@ header{
 
 <!-- CODEMIRROR INIT + APP JS -->
 <script>
-const LANGUAGE = "{{ language }}";
-const USERNAME = "{{ username }}";
+// ===== WARNING SOUND FUNCTION =====
+let warningAudioContext = null;
+function playWarningSound() {
+    try {
+        if (!warningAudioContext) {
+            warningAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const oscillator = warningAudioContext.createOscillator();
+        const gainNode = warningAudioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(warningAudioContext.destination);
+        oscillator.frequency.value = 800;
+        oscillator.type = 'square';
+        gainNode.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
+        oscillator.start(warningAudioContext.currentTime);
+        oscillator.stop(warningAudioContext.currentTime + 0.5);
+        // Play second beep
+        setTimeout(() => {
+            const osc2 = warningAudioContext.createOscillator();
+            const gain2 = warningAudioContext.createGain();
+            osc2.connect(gain2);
+            gain2.connect(warningAudioContext.destination);
+            osc2.frequency.value = 600;
+            osc2.type = 'square';
+            gain2.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
+            osc2.start(warningAudioContext.currentTime);
+            osc2.stop(warningAudioContext.currentTime + 0.5);
+        }, 200);
+    } catch (e) {
+        console.log('Warning sound error:', e);
+    }
+}
+
+// Fetch and preview CSV if available
+var csvPreviewEl = document.getElementById('csv-preview');
+if (csvPreviewEl && csvPreviewEl.dataset.csvFile) {
+    fetch('/static/csv/' + csvPreviewEl.dataset.csvFile)
+        .then(function(r) { return r.text(); })
+        .then(function(txt) {
+            csvPreviewEl.textContent = txt.split('\n').slice(0, 10).join('\n');
+        })
+        .catch(function() {
+            csvPreviewEl.textContent = 'Could not load CSV preview.';
+        });
+}
+var LANGUAGE = "{{ language }}";
+var USERNAME = "{{ username }}";
 
 // Map language → CodeMirror mode + file ext
 const langConfig = {
@@ -498,12 +568,14 @@ setInterval(() => {
     .then(r => r.json())
     .then(data => {
         if (data.status === "cheating") {
+            playWarningSound();
             vCheat = data.cheating_count || vCheat;
             updateViolationUI();
             cheatAlert.innerHTML = `❌ Multiple people detected! Count: ${data.cheating_count}/10`;
             cheatAlert.style.display = "block";
             blockOverlay.style.display = "flex";
         } else if (data.status === "terminated") {
+            playWarningSound();
             cheatAlert.innerHTML = `❌ Exam terminated!`;
             cheatAlert.style.display = "block";
             blockOverlay.style.display = "flex";
@@ -538,6 +610,7 @@ sendLiveFrame();
 // =========== TAB VISIBILITY ===========
 document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+        playWarningSound();
         vTab++;
         updateViolationUI();
         fetch("/tab-switch", {method:"POST"});
@@ -561,44 +634,3 @@ document.addEventListener("keydown", e => {
 </script>
 </body>
 </html>
-
-<form method="POST" action="/upload-csv-exam" enctype="multipart/form-data">
-    <label for="csv_file">Upload your CSV file:</label>
-    <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
-    <button type="submit">Upload CSV</button>
-</form>
-
-<!-- Add this to your coding_exam.html -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
-<script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
-
-<div id="csvEditor" style="width: 100%;"></div>
-<button onclick="downloadCSV()">Download CSV</button>
-
-<script>
-  // Example: empty table with 5 rows and 4 columns
-  var data = [
-    ['', '', '', ''],
-    ['', '', '', ''],
-    ['', '', '', ''],
-    ['', '', '', ''],
-    ['', '', '', '']
-  ];
-
-  var container = document.getElementById('csvEditor');
-  var hot = new Handsontable(container, {
-    data: data,
-    rowHeaders: true,
-    colHeaders: true,
-    licenseKey: 'non-commercial-and-evaluation'
-  });
-
-  function downloadCSV() {
-    var exportPlugin = hot.getPlugin('exportFile');
-    exportPlugin.downloadFile('csv', {
-      filename: 'edited_csv',
-      columnHeaders: true,
-      rowHeaders: true
-    });
-  }
-</script>

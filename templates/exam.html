@@ -366,6 +366,41 @@ header{
 </div>
 
 <script>
+// ===== WARNING SOUND FUNCTION =====
+let warningAudioContext = null;
+function playWarningSound() {
+    try {
+        if (!warningAudioContext) {
+            warningAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const oscillator = warningAudioContext.createOscillator();
+        const gainNode = warningAudioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(warningAudioContext.destination);
+        oscillator.frequency.value = 800;
+        oscillator.type = 'square';
+        gainNode.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
+        oscillator.start(warningAudioContext.currentTime);
+        oscillator.stop(warningAudioContext.currentTime + 0.5);
+        // Play second beep
+        setTimeout(() => {
+            const osc2 = warningAudioContext.createOscillator();
+            const gain2 = warningAudioContext.createGain();
+            osc2.connect(gain2);
+            gain2.connect(warningAudioContext.destination);
+            osc2.frequency.value = 600;
+            osc2.type = 'square';
+            gain2.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
+            osc2.start(warningAudioContext.currentTime);
+            osc2.stop(warningAudioContext.currentTime + 0.5);
+        }, 200);
+    } catch (e) {
+        console.log('Warning sound error:', e);
+    }
+}
+
 // Question Navigation & Skip Logic
 let currentQuestion = 1;
 const totalQuestions = parseInt(document.getElementById('total-q').textContent);
@@ -881,6 +916,7 @@ setInterval(() => {
         const examForm = document.getElementById("exam-form");
         const blockOverlay = document.getElementById("block-overlay");
         if (data.status === "cheating") {
+            playWarningSound();
             cheatMessage.innerHTML = `❌ Cheating detected! Count: ${data.cheating_count}/10`;
             cheatMessage.style.display = "block";
             if (blockOverlay) blockOverlay.style.display = "flex";
@@ -889,6 +925,7 @@ setInterval(() => {
                 examForm.style.opacity = "0.5";
             }
         } else if (data.status === "terminated") {
+            playWarningSound();
             cheatMessage.innerHTML = `❌ Exam terminated due to excessive cheating! Count: ${data.cheating_count}`;
             cheatMessage.style.display = "block";
             if (blockOverlay) blockOverlay.style.display = "flex";
@@ -969,6 +1006,7 @@ document.addEventListener("keydown", function (e) {
 // Detect tab change and notify backend
 document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
+        playWarningSound();
         alert("⚠ Tab switching detected!");
         // Notify backend
         fetch("/tab-switch", { method: "POST" });
