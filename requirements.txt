@@ -16,4 +16,4 @@ pandas
 Werkzeug
 scikit-learn
 matplotlib
-resend
+requests

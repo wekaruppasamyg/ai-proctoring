@@ -15,20 +15,18 @@ from time import time
 import threading
 from werkzeug.utils import secure_filename
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
-import resend
+import requests as http_requests  # For Brevo API
 
 # ================= APP CONFIG =================
 app = Flask(__name__)
 app.secret_key = "exam-secret"
 os.makedirs("faces", exist_ok=True)
 
-# ================= EMAIL CONFIG (Resend.com) =================
-# Get your API key from: https://resend.com/api-keys
-RESEND_API_KEY = "re_jUsD2VvP_GMjCgw8asad7nA1rCxVzzpw5"  # Replace with your Resend API key
-EMAIL_FROM = "AI Proctor <onboarding@resend.dev>"  # Use your verified domain or resend.dev for testing
-
-# Initialize Resend
-resend.api_key = RESEND_API_KEY
+# ================= EMAIL CONFIG (Brevo/Sendinblue) =================
+# Get your API key from: https://app.brevo.com/settings/keys/api
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
+EMAIL_FROM_NAME = "AI Proctor"
+EMAIL_FROM_ADDRESS = "sanjayganesan946@gmail.com"  # Your email (must be verified in Brevo)
 
 # OTP Storage: {email: {"otp": "123456", "expires": datetime}}
 otp_storage = {}
@@ -38,8 +36,16 @@ def generate_otp():
     return ''.join(random.choices(string.digits, k=6))
 
 def send_otp_email(to_email, otp):
-    """Send OTP email to user using Resend"""
+    """Send OTP email to user using Brevo (Sendinblue)"""
     try:
+        url = "https://api.brevo.com/v3/smtp/email"
+        
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json"
+        }
+        
         html_body = f"""
         <html>
         <body style="font-family: 'Poppins', Arial, sans-serif; background: #f4f4f4; padding: 30px;">
@@ -57,19 +63,27 @@ def send_otp_email(to_email, otp):
         </html>
         """
         
-        params = {
-            "from": EMAIL_FROM,
-            "to": [to_email],
+        payload = {
+            "sender": {
+                "name": EMAIL_FROM_NAME,
+                "email": EMAIL_FROM_ADDRESS
+            },
+            "to": [{"email": to_email}],
             "subject": "🔐 AI Proctor - Password Reset OTP",
-            "html": html_body
+            "htmlContent": html_body
         }
         
-        response = resend.Emails.send(params)
-        print(f"Email sent successfully: {response}")
-        return True, None
+        response = http_requests.post(url, json=payload, headers=headers)
+        
+        if response.status_code == 201:
+            print(f"Email sent successfully: {response.json()}")
+            return True, None
+        else:
+            print(f"Brevo error: {response.status_code} - {response.text}")
+            return False, f"Email service error: {response.text}"
         
     except Exception as e:
-        print(f"Resend email error: {e}")
+        print(f"Brevo email error: {e}")
         return False, f"Failed to send email: {str(e)}"
 
 # ================= MJPEG STREAMING =================
