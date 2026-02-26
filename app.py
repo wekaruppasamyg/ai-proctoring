@@ -15,23 +15,20 @@ from time import time
 import threading
 from werkzeug.utils import secure_filename
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import resend
 
 # ================= APP CONFIG =================
 app = Flask(__name__)
 app.secret_key = "exam-secret"
 os.makedirs("faces", exist_ok=True)
 
-# ================= EMAIL CONFIG (Gmail SMTP) =================
-# TO USE: Enable "Less secure app access" OR use App Password for Gmail
-# Generate App Password: Google Account > Security > 2-Step Verification > App passwords
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 465  # SSL port (more likely to work on Render)
-EMAIL_USE_SSL = True
-EMAIL_ADDRESS = "sanjayganesan946@gmail.com"  # Replace with your email
-EMAIL_PASSWORD = "bllhjzqkmfgdncoc"     # Replace with your app password
+# ================= EMAIL CONFIG (Resend.com) =================
+# Get your API key from: https://resend.com/api-keys
+RESEND_API_KEY = "re_jUsD2VvP_GMjCgw8asad7nA1rCxVzzpw5"  # Replace with your Resend API key
+EMAIL_FROM = "AI Proctor <onboarding@resend.dev>"  # Use your verified domain or resend.dev for testing
+
+# Initialize Resend
+resend.api_key = RESEND_API_KEY
 
 # OTP Storage: {email: {"otp": "123456", "expires": datetime}}
 otp_storage = {}
@@ -41,14 +38,9 @@ def generate_otp():
     return ''.join(random.choices(string.digits, k=6))
 
 def send_otp_email(to_email, otp):
-    """Send OTP email to user"""
+    """Send OTP email to user using Resend"""
     try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_ADDRESS
-        msg['To'] = to_email
-        msg['Subject'] = "🔐 AI Proctor - Password Reset OTP"
-        
-        body = f"""
+        html_body = f"""
         <html>
         <body style="font-family: 'Poppins', Arial, sans-serif; background: #f4f4f4; padding: 30px;">
             <div style="max-width: 500px; margin: auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
@@ -65,27 +57,19 @@ def send_otp_email(to_email, otp):
         </html>
         """
         
-        msg.attach(MIMEText(body, 'html'))
+        params = {
+            "from": EMAIL_FROM,
+            "to": [to_email],
+            "subject": "🔐 AI Proctor - Password Reset OTP",
+            "html": html_body
+        }
         
-        # Use SSL for port 465
-        if EMAIL_USE_SSL:
-            server = smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=30)
-        else:
-            server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=30)
-            server.starttls()
-        
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        response = resend.Emails.send(params)
+        print(f"Email sent successfully: {response}")
         return True, None
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"SMTP Auth error: {e}")
-        return False, "Email authentication failed. Check app password."
-    except smtplib.SMTPException as e:
-        print(f"SMTP error: {e}")
-        return False, f"Email server error: {str(e)}"
+        
     except Exception as e:
-        print(f"Email error: {e}")
+        print(f"Resend email error: {e}")
         return False, f"Failed to send email: {str(e)}"
 
 # ================= MJPEG STREAMING =================
