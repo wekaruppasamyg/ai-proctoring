@@ -66,15 +66,21 @@ def send_otp_email(to_email, otp):
         
         msg.attach(MIMEText(body, 'html'))
         
-        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
+        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=30)
         server.starttls()
         server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
         server.send_message(msg)
         server.quit()
-        return True
+        return True, None
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"SMTP Auth error: {e}")
+        return False, "Email authentication failed. Check app password."
+    except smtplib.SMTPException as e:
+        print(f"SMTP error: {e}")
+        return False, f"Email server error: {str(e)}"
     except Exception as e:
         print(f"Email error: {e}")
-        return False
+        return False, f"Failed to send email: {str(e)}"
 
 # ================= MJPEG STREAMING =================
 streams = {}
@@ -429,38 +435,47 @@ def forgot_password():
 
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
-    email = request.form.get("email", "").strip()
-    
-    if not email:
-        return render_template("forgot_password.html", error="Please enter your email address")
-    
-    # Check if email exists in database
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT username FROM users WHERE email=%s", (email,))
-    user = cur.fetchone()
-    conn.close()
-    
-    if not user:
-        return render_template("forgot_password.html", error="No account found with this email address")
-    
-    # Generate OTP and store with expiry
-    otp = generate_otp()
-    otp_storage[email] = {
-        "otp": otp,
-        "expires": datetime.now() + timedelta(minutes=10),
-        "username": user[0]
-    }
-    
-    # Send OTP via email
-    if send_otp_email(email, otp):
+    try:
+        email = request.form.get("email", "").strip()
+        
+        if not email:
+            return render_template("forgot_password.html", error="Please enter your email address")
+        
+        # Check if email exists in database
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT username FROM users WHERE email=%s", (email,))
+        user = cur.fetchone()
+        conn.close()
+        
+        if not user:
+            return render_template("forgot_password.html", error="No account found with this email address")
+        
+        # Generate OTP and store with expiry
+        otp = generate_otp()
+        otp_storage[email] = {
+            "otp": otp,
+            "expires": datetime.now() + timedelta(minutes=10),
+            "username": user[0]
+        }
+        
+        # Send OTP via email
+        success, error_msg = send_otp_email(email, otp)
+        if success:
+            return render_template("forgot_password.html", 
+                                 success="OTP sent to your email! Check your inbox.",
+                                 email=email,
+                                 show_otp_form=True)
+        else:
+            # Clear stored OTP on failure
+            if email in otp_storage:
+                del otp_storage[email]
+            return render_template("forgot_password.html", 
+                                 error=error_msg or "Failed to send OTP. Please try again.")
+    except Exception as e:
+        print(f"Send OTP route error: {e}")
         return render_template("forgot_password.html", 
-                             success="OTP sent to your email! Check your inbox.",
-                             email=email,
-                             show_otp_form=True)
-    else:
-        return render_template("forgot_password.html", 
-                             error="Failed to send OTP. Please check email configuration or try again.")
+                             error=f"An error occurred: {str(e)}. Please try again.")
 
 
 @app.route("/verify-otp", methods=["POST"])
