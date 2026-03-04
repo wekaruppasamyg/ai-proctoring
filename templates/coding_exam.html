@@ -787,7 +787,6 @@ faceMesh.onResults(results => {
         }
         
         if (lookingAwayFrames > LOOKING_AWAY_THRESHOLD) {
-            playWarningSound();
             vLook++;
             updateViolationUI();
             fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
@@ -817,7 +816,6 @@ faceMesh.onResults(results => {
         // No face - camera might be hidden or looking away
         lookingAwayFrames++;
         if (lookingAwayFrames > 30) {
-            playWarningSound();
             vLook++;
             updateViolationUI();
             fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
@@ -860,7 +858,6 @@ hands.onResults(results => {
         }
         
         if (handCoverFrames > HAND_COVER_THRESHOLD) {
-            playWarningSound();
             vHand++;
             updateViolationUI();
             fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
@@ -903,6 +900,59 @@ setInterval(() => {
         lastBlinkTime = Date.now(); // Reset to avoid spam
     }
 }, 1000);
+
+// ===== NOISE/SURROUNDING SOUND DETECTION =====
+let noiseDetected = false;
+let audioContext = null;
+let analyser = null;
+const NOISE_THRESHOLD = 50; // Adjust sensitivity (higher = less sensitive)
+let noiseFrames = 0;
+const NOISE_FRAME_THRESHOLD = 15; // Consecutive frames to confirm noise
+
+navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(audioStream => {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(audioStream);
+        microphone.connect(analyser);
+        analyser.fftSize = 256;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        function checkNoise() {
+            if (!analyser) return;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / bufferLength;
+            
+            if (average > NOISE_THRESHOLD) {
+                noiseFrames++;
+                if (noiseFrames >= NOISE_FRAME_THRESHOLD && !noiseDetected) {
+                    noiseDetected = true;
+                    blockOverlay.style.display = 'flex';
+                    document.querySelector('#block-overlay h2').textContent = '⚠️ Noise Detected';
+                    document.querySelector('#block-overlay p').innerHTML = 'Surrounding noise/sound detected.<br>Please ensure a quiet environment to continue.';
+                    fetch('/monitor-exam', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event: 'noise_detected', level: average })
+                    }).catch(()=>{});
+                }
+            } else {
+                noiseFrames = Math.max(0, noiseFrames - 1);
+                if (noiseFrames === 0 && noiseDetected) {
+                    noiseDetected = false;
+                    blockOverlay.style.display = 'none';
+                }
+            }
+            requestAnimationFrame(checkNoise);
+        }
+        checkNoise();
+    })
+    .catch(err => console.log('Microphone access denied:', err));
 
 // Camera hidden check every 2 seconds
 setInterval(() => {

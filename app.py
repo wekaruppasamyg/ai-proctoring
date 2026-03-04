@@ -640,6 +640,9 @@ def start_exam():
     # Blink tracking (only track no-blink events)
     session['no_blink_count'] = 0
     session['last_no_blink_ts'] = 0
+    # Noise detection tracking
+    session['noise_count'] = 0
+    session['last_noise_ts'] = 0
     # Store subject for later use
     session['current_subject'] = subject_name
     return render_template("exam.html", questions=questions, subject=subject_name)
@@ -708,6 +711,31 @@ def monitor_exam():
             session['last_no_blink_ts'] = now
         return {"status": "no_blink", "no_blink_count": session['no_blink_count']}
 
+    # Noise detection handling with cooldown
+    def increment_noise():
+        now = time()
+        if now - session.get('last_noise_ts', 0) >= 3.0:
+            session['noise_count'] = session.get('noise_count', 0) + 1
+            session['last_noise_ts'] = now
+            # Log event in camera_events table
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO camera_events (username, event_type, event_time, exam_subject) VALUES (%s, %s, NOW(), %s)",
+                    (
+                        session.get("username", "unknown"),
+                        "noise_detected",
+                        session.get("current_subject", "unknown"),
+                    ),
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                print(f"Error logging noise event: {e}")
+        return {"status": "noise", "noise_count": session['noise_count']}
+
     def increment_eye_tracker():
         now = time()
         if now - session.get('last_eye_tracker_ts', 0) >= 2.5:
@@ -771,6 +799,9 @@ def monitor_exam():
 
     if data.get("event") == "head_movement_violation":
         return increment_head_movement()
+
+    if data.get("event") == "noise_detected":
+        return increment_noise()
 
     # Handle multiple persons detected from frontend
     if data.get("event") == "multiple_persons":
@@ -1331,6 +1362,8 @@ def coding_exam():
         session['head_movement_count'] = 0
         session['no_blink_count'] = 0
         session['last_no_blink_ts'] = 0
+        session['noise_count'] = 0
+        session['last_noise_ts'] = 0
         session['current_subject'] = f"Coding-{language}"
         return render_template("coding_exam.html", language=language, username=session["username"], csv_file=csv_file)
 

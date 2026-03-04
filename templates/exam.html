@@ -613,7 +613,6 @@ faceMesh.onResults(results => {
             lookingAwayFrames = 0;
         }
         if (lookingAwayFrames > LOOKING_AWAY_THRESHOLD) {
-            playWarningSound();
             errorMessage.style.display = 'block';
             fetch("/monitor-exam", {
                 method: "POST",
@@ -790,7 +789,6 @@ faceMesh.onResults(results => {
         // No face detected - student might have moved away
         lookingAwayFrames++;
         if (lookingAwayFrames > 30) {
-            playWarningSound();
             errorMessage.style.display = 'block';
             fetch('/monitor-exam', {
                 method: 'POST',
@@ -821,6 +819,61 @@ setInterval(() => {
         blinkMessage.style.display = 'none';
     }
 }, 1000);
+
+// ===== NOISE/SURROUNDING SOUND DETECTION =====
+let noiseDetected = false;
+let audioContext = null;
+let analyser = null;
+const NOISE_THRESHOLD = 50; // Adjust sensitivity (higher = less sensitive)
+let noiseFrames = 0;
+const NOISE_FRAME_THRESHOLD = 15; // Consecutive frames to confirm noise
+
+navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(audioStream => {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(audioStream);
+        microphone.connect(analyser);
+        analyser.fftSize = 256;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        function checkNoise() {
+            if (!analyser) return;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / bufferLength;
+            
+            const blockOverlay = document.getElementById('block-overlay');
+            const blockMessage = document.getElementById('block-person-message');
+            
+            if (average > NOISE_THRESHOLD) {
+                noiseFrames++;
+                if (noiseFrames >= NOISE_FRAME_THRESHOLD && !noiseDetected) {
+                    noiseDetected = true;
+                    if (blockOverlay) blockOverlay.style.display = 'flex';
+                    if (blockMessage) blockMessage.innerHTML = 'Quiz Blocked<br>Noise/Surrounding Sound Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>';
+                    fetch('/monitor-exam', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event: 'noise_detected', level: average })
+                    }).catch(()=>{});
+                }
+            } else {
+                noiseFrames = Math.max(0, noiseFrames - 1);
+                if (noiseFrames === 0 && noiseDetected) {
+                    noiseDetected = false;
+                    if (blockOverlay) blockOverlay.style.display = 'none';
+                }
+            }
+            requestAnimationFrame(checkNoise);
+        }
+        checkNoise();
+    })
+    .catch(err => console.log('Microphone access denied:', err));
 
 const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
 hands.setOptions({
@@ -1048,84 +1101,13 @@ document.addEventListener("visibilitychange", function () {
 </script>
 
 
-<!-- Overlay to block quiz when another person is detected -->
+<!-- Overlay to block quiz when another person or noise is detected -->
 <div id="block-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.85);z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
     <div id="block-person-message" style="color:#fff;font-size:2rem;font-weight:bold;text-align:center;">
         Quiz Blocked<br>Another person detected!<br>
         <span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>
     </div>
-    <div id="block-noise-message" style="color:#fff;font-size:2rem;font-weight:bold;text-align:center;display:none;">
-        Quiz Blocked<br>Unwanted noise detected!<br>
-        <span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>
-    </div>
 </div>
-<script>
-// ===== UNWANTED NOISE DETECTION =====
-let audioContext;
-let analyser;
-let microphone;
-let noiseBlocked = false;
-const blockOverlay = document.getElementById("block-overlay");
-const blockPersonMessage = document.getElementById("block-person-message");
-const blockNoiseMessage = document.getElementById("block-noise-message");
-const examForm = document.getElementById("exam-form");
-
-function startNoiseDetection() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-    navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(function(stream) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            microphone = audioContext.createMediaStreamSource(stream);
-            microphone.connect(analyser);
-            analyser.fftSize = 512;
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            function detectNoise() {
-                analyser.getByteFrequencyData(dataArray);
-                // Calculate average volume
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
-                const avg = sum / dataArray.length;
-                // Threshold: adjust as needed (e.g., 40 is moderate)
-                if (avg > 40) {
-                    if (!noiseBlocked) {
-                        noiseBlocked = true;
-                        if (blockOverlay) {
-                            blockOverlay.style.display = "flex";
-                            if (blockNoiseMessage) blockNoiseMessage.style.display = "block";
-                            if (blockPersonMessage) blockPersonMessage.style.display = "none";
-                        }
-                        if (examForm) {
-                            examForm.style.pointerEvents = "none";
-                            examForm.style.opacity = "0.5";
-                        }
-                    }
-                } else {
-                    if (noiseBlocked) {
-                        noiseBlocked = false;
-                        if (blockOverlay) blockOverlay.style.display = "none";
-                        if (blockNoiseMessage) blockNoiseMessage.style.display = "none";
-                        if (blockPersonMessage) blockPersonMessage.style.display = "block";
-                        if (examForm) {
-                            examForm.style.pointerEvents = "auto";
-                            examForm.style.opacity = "1";
-                        }
-                    }
-                }
-                requestAnimationFrame(detectNoise);
-            }
-            detectNoise();
-        })
-        .catch(function(err) {
-            console.warn("Audio access denied or error:", err);
-        });
-}
-
-// Start noise detection after DOM loaded
-window.addEventListener("DOMContentLoaded", startNoiseDetection);
-</script>
 
 </body>
 </html>
