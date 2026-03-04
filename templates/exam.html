@@ -295,7 +295,7 @@ header{
 </div>
 
 <div id="blink-message" style="display:none;color:#ff4444;font-weight:bold;margin-top:10px;">
-    ⚠️ No blink detected for 10 seconds — please blink!
+    ⚠️ No blink detected for 20 seconds — please blink!
 </div>
 
 <div id="eye-tracker-message" style="display:none;color:#ff6600;font-weight:bold;margin-top:10px;font-size:20px;padding:12px;background:#ffeecc;border-radius:8px;border-left:4px solid #ff6600;">
@@ -367,35 +367,14 @@ header{
 
 <script>
 // ===== WARNING SOUND FUNCTION =====
-let warningAudioContext = null;
+let warningAudio = null;
 function playWarningSound() {
     try {
-        if (!warningAudioContext) {
-            warningAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (!warningAudio) {
+            warningAudio = new Audio('/static/faaaa.mp3');
         }
-        const oscillator = warningAudioContext.createOscillator();
-        const gainNode = warningAudioContext.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(warningAudioContext.destination);
-        oscillator.frequency.value = 800;
-        oscillator.type = 'square';
-        gainNode.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
-        oscillator.start(warningAudioContext.currentTime);
-        oscillator.stop(warningAudioContext.currentTime + 0.5);
-        // Play second beep
-        setTimeout(() => {
-            const osc2 = warningAudioContext.createOscillator();
-            const gain2 = warningAudioContext.createGain();
-            osc2.connect(gain2);
-            gain2.connect(warningAudioContext.destination);
-            osc2.frequency.value = 600;
-            osc2.type = 'square';
-            gain2.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
-            gain2.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
-            osc2.start(warningAudioContext.currentTime);
-            osc2.stop(warningAudioContext.currentTime + 0.5);
-        }, 200);
+        warningAudio.currentTime = 0;
+        warningAudio.play().catch(e => console.log('Audio play error:', e));
     } catch (e) {
         console.log('Warning sound error:', e);
     }
@@ -563,6 +542,10 @@ let headMovementFrames = 0;
 const HEAD_MOVEMENT_THRESHOLD = 12;
 let previousHeadPosition = null;
 
+// Multiple person detection state (frontend)
+let multiFaceFrames = 0;
+const MULTI_FACE_THRESHOLD = 5; // Need 5 consecutive frames to confirm
+
 // Blink detection state
 let lastBlinkTime = Date.now();
 let eyeClosed = false;
@@ -584,12 +567,37 @@ function euclidean(a, b) {
 
 const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
 faceMesh.setOptions({
-    maxNumFaces: 1,
+    maxNumFaces: 4,  // Detect up to 4 faces for multi-person detection
     refineLandmarks: true,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
+    minDetectionConfidence: 0.6,  // Increased for better accuracy
+    minTrackingConfidence: 0.6   // Increased for better accuracy
 });
 faceMesh.onResults(results => {
+    // ===== MULTIPLE PERSON DETECTION (Frontend) =====
+    const numFaces = results.multiFaceLandmarks ? results.multiFaceLandmarks.length : 0;
+    
+    if (numFaces > 1) {
+        multiFaceFrames++;
+        if (multiFaceFrames >= MULTI_FACE_THRESHOLD) {
+            // Multiple faces confirmed - trigger alert
+            cheatMessage.innerHTML = `❌ Another person detected! (${numFaces} faces)`;
+            cheatMessage.style.display = 'block';
+            playWarningSound();
+            // Notify backend
+            fetch("/monitor-exam", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ event: "multiple_persons", face_count: numFaces })
+            }).catch(()=>{});
+            multiFaceFrames = 0; // Reset after notification
+        }
+    } else {
+        multiFaceFrames = Math.max(0, multiFaceFrames - 1); // Gradually decrease
+        if (numFaces === 1) {
+            cheatMessage.style.display = 'none';
+        }
+    }
+    
     if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
 
@@ -783,9 +791,9 @@ faceMesh.onResults(results => {
     }
 });
 
-// Check for missing blink (every second); alert and send DB/store event if no blink within 10s
+// Check for missing blink (every second); alert and send DB/store event if no blink within 20s
 setInterval(() => {
-    if (Date.now() - lastBlinkTime > 10000) {
+    if (Date.now() - lastBlinkTime > 20000) {
         blinkMessage.style.display = 'block';
         fetch('/monitor-exam', {
             method: 'POST',
@@ -976,6 +984,14 @@ document.addEventListener("contextmenu", e => e.preventDefault());
 
 // Disable key combinations
 document.addEventListener("keydown", function (e) {
+
+    // Block volume control keys (mute, volume up, volume down)
+    if (e.key === "AudioVolumeMute" || e.key === "AudioVolumeDown" || e.key === "AudioVolumeUp" ||
+        e.keyCode === 173 || e.keyCode === 174 || e.keyCode === 175) {
+        e.preventDefault();
+        alert("⚠ Volume controls are disabled during the exam!");
+        return false;
+    }
 
     // Block Ctrl-based shortcuts
     if (e.ctrlKey && (

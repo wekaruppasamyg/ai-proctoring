@@ -624,6 +624,7 @@ def start_exam():
 
     # Initialize cheating and event tracking
     session['cheating_count'] = 0
+    session['multi_face_confirm'] = 0  # For face detection confirmation
     session['terminated'] = False
     session['looking_away_count'] = 0
     session['tab_switch_count'] = 0
@@ -771,6 +772,16 @@ def monitor_exam():
     if data.get("event") == "head_movement_violation":
         return increment_head_movement()
 
+    # Handle multiple persons detected from frontend
+    if data.get("event") == "multiple_persons":
+        face_count = data.get("face_count", 2)
+        session['cheating_count'] = session.get('cheating_count', 0) + 1
+        print(f"[Frontend] Multiple persons detected: {face_count} faces")
+        if session['cheating_count'] >= 10:
+            session['terminated'] = True
+            return {"status": "terminated", "cheating_count": session['cheating_count']}
+        return {"status": "cheating", "cheating_count": session['cheating_count'], "face_count": face_count}
+
 
     img_data = data["image"].split(",")[1] if data.get("image") else None
     if img_data:
@@ -787,24 +798,50 @@ def monitor_exam():
             cv2.imwrite(live_path, img)
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Use multiple cascade classifiers for better accuracy
         face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
+        face_cascade_alt = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"
+        )
+        
+        # Primary detection with stricter parameters
         faces = face_cascade.detectMultiScale(
             gray,
             scaleFactor=1.1,
-            minNeighbors=3,
-            minSize=(60, 60)
+            minNeighbors=5,  # Increased from 3 for fewer false positives
+            minSize=(80, 80),  # Increased minimum face size
+            flags=cv2.CASCADE_SCALE_IMAGE
         )
+        
+        # If primary detects multiple faces, confirm with secondary cascade
+        if len(faces) > 1:
+            faces_alt = face_cascade_alt.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=4,
+                minSize=(80, 80)
+            )
+            # Only count as multiple persons if both detectors agree
+            if len(faces_alt) > 1:
+                # Confirmation counter - need 3 consecutive detections
+                session['multi_face_confirm'] = session.get('multi_face_confirm', 0) + 1
+                if session['multi_face_confirm'] >= 3:
+                    session['multi_face_confirm'] = 0  # Reset counter
+                    session['cheating_count'] = session.get('cheating_count', 0) + 1
+                    if session['cheating_count'] >= 10:
+                        session['terminated'] = True
+                        return {"status": "terminated", "cheating_count": session['cheating_count']}
+                    return {"status": "cheating", "cheating_count": session['cheating_count']}
+            else:
+                session['multi_face_confirm'] = 0
+        else:
+            session['multi_face_confirm'] = 0
+            
         print("Faces detected:", len(faces))
         if len(faces) == 0:
             return increment_look_away()
-        if len(faces) > 1:
-            session['cheating_count'] = session.get('cheating_count', 0) + 1
-            if session['cheating_count'] >= 10:
-                session['terminated'] = True
-                return {"status": "terminated", "cheating_count": session['cheating_count']}
-            return {"status": "cheating", "cheating_count": session['cheating_count']}
         return {"status": "ok"}
     return {"status": "ok"}
 
@@ -891,12 +928,11 @@ def submit_exam():
         head_movement_count
     )
     
-    # If total malpractice > 2, deduct 2 marks
+    # Deduct 1 mark for each malpractice violation
     original_score = score
-    penalty_applied = 0
-    if total_malpractice > 2 and not terminated:
-        penalty_applied = 2
-        score = max(0, score - 2)  # Ensure score doesn't go below 0
+    penalty_applied = total_malpractice
+    if total_malpractice > 0 and not terminated:
+        score = max(0, score - total_malpractice)  # Ensure score doesn't go below 0
     # ===== END MALPRACTICE PENALTY =====
 
     cur.execute(
@@ -1282,6 +1318,7 @@ def coding_exam():
         session['coding_csv_file'] = csv_file
         # Reset monitoring counters for coding exam
         session['cheating_count'] = 0
+        session['multi_face_confirm'] = 0  # For face detection confirmation
         session['terminated'] = False
         session['looking_away_count'] = 0
         session['tab_switch_count'] = 0
@@ -1315,16 +1352,90 @@ def run_code():
 
     try:
         if language == "Python":
+            # Wrap code to capture matplotlib/seaborn plots
+            wrapper_code = '''
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import sys
+import io
+import base64
+
+# Capture stdout
+_old_stdout = sys.stdout
+_captured_output = io.StringIO()
+sys.stdout = _captured_output
+
+# User code starts
+try:
+''' + '\n'.join('    ' + line for line in code.split('\n')) + '''
+except Exception as _user_error:
+    print(f"Error: {_user_error}")
+
+# User code ends
+sys.stdout = _old_stdout
+_text_output = _captured_output.getvalue()
+
+# Check for any open matplotlib figures
+_images = []
+_fig_nums = plt.get_fignums()
+if _fig_nums:
+    for _fig_num in _fig_nums:
+        _fig = plt.figure(_fig_num)
+        _buf = io.BytesIO()
+        _fig.savefig(_buf, format='png', dpi=100, bbox_inches='tight', facecolor='white')
+        _buf.seek(0)
+        _img_base64 = base64.b64encode(_buf.read()).decode('utf-8')
+        _images.append(_img_base64)
+        _buf.close()
+    plt.close('all')
+
+# Output results
+print("__TEXT_OUTPUT__")
+print(_text_output)
+print("__IMAGES__")
+for _img in _images:
+    print(_img)
+    print("__IMG_SEP__")
+'''
             with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
-                f.write(code)
+                f.write(wrapper_code)
                 tmp_path = f.name
             try:
                 result = subprocess.run(
                     [sys.executable, tmp_path],
-                    capture_output=True, text=True, timeout=10
+                    capture_output=True, text=True, timeout=30
                 )
-                output = result.stdout
+                raw_output = result.stdout
                 error = result.stderr
+                
+                # Parse output
+                text_output = ""
+                images = []
+                if "__TEXT_OUTPUT__" in raw_output:
+                    parts = raw_output.split("__TEXT_OUTPUT__")
+                    if len(parts) > 1:
+                        rest = parts[1]
+                        if "__IMAGES__" in rest:
+                            text_part, img_part = rest.split("__IMAGES__", 1)
+                            text_output = text_part.strip()
+                            img_strings = img_part.split("__IMG_SEP__")
+                            images = [img.strip() for img in img_strings if img.strip()]
+                        else:
+                            text_output = rest.strip()
+                else:
+                    text_output = raw_output
+                
+                if images:
+                    return jsonify({
+                        "type": "plot",
+                        "output": text_output,
+                        "images": images,
+                        "is_error": bool(error)
+                    })
+                
+                output = text_output
+                
             finally:
                 try:
                     os.unlink(tmp_path)

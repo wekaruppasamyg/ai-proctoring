@@ -652,12 +652,6 @@ header {
                 <div class="activity-label">Eye Movement</div>
             </div>
 
-            <div class="activity-item {% if head_movement_count == 0 %}clean{% elif head_movement_count <= 5 %}warning{% else %}danger{% endif %}">
-                <div class="activity-emoji">🔃</div>
-                <div class="activity-count">{{ head_movement_count }}</div>
-                <div class="activity-label">Head Movement</div>
-            </div>
-
             <div class="activity-item {% if no_blink_count == 0 %}clean{% elif no_blink_count <= 3 %}warning{% else %}danger{% endif %}">
                 <div class="activity-emoji">😐</div>
                 <div class="activity-count">{{ no_blink_count }}</div>
@@ -706,7 +700,6 @@ header {
     data-camera-hidden="{{ camera_hidden_count }}"
     data-hand-cover="{{ hand_cover_count }}"
     data-eye-tracker="{{ eye_tracker_count }}"
-    data-head-movement="{{ head_movement_count }}"
     data-no-blink="{{ no_blink_count }}"
     data-terminated="{{ 'true' if terminated else 'false' }}">
 </div>
@@ -729,7 +722,6 @@ var EXAM_DATA = {
     cameraHidden: parseInt(examDataEl.dataset.cameraHidden),
     handCover: parseInt(examDataEl.dataset.handCover),
     eyeTracker: parseInt(examDataEl.dataset.eyeTracker),
-    headMovement: parseInt(examDataEl.dataset.headMovement),
     noBlink: parseInt(examDataEl.dataset.noBlink),
     terminated: examDataEl.dataset.terminated === 'true'
 };
@@ -752,7 +744,6 @@ function downloadResult() {
             camera_hidden: EXAM_DATA.cameraHidden,
             hand_cover: EXAM_DATA.handCover,
             eye_movement: EXAM_DATA.eyeTracker,
-            head_movement: EXAM_DATA.headMovement,
             no_blink: EXAM_DATA.noBlink
         },
         terminated: EXAM_DATA.terminated
@@ -801,7 +792,6 @@ penaltySection +
 "║  Camera Hidden: " + resultData.activity.camera_hidden + "\n" +
 "║  Hand Cover: " + resultData.activity.hand_cover + "\n" +
 "║  Eye Movement Alerts: " + resultData.activity.eye_movement + "\n" +
-"║  Head Movement Alerts: " + resultData.activity.head_movement + "\n" +
 "║  No Blink Alerts: " + resultData.activity.no_blink + "\n" +
 "║                                                          ║\n" +
 "╠══════════════════════════════════════════════════════════╣\n" +

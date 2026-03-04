@@ -149,6 +149,17 @@ header{
     display:none;width:100%;height:100%;border:none;background:#fff;flex:1;
 }
 
+/* PLOT OUTPUT IMAGES */
+#plot-output{
+    display:none;flex:1;overflow-y:auto;padding:12px 16px;background:#1a1a2e;
+}
+#plot-output img{
+    max-width:100%;border-radius:8px;margin-bottom:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3);
+}
+#plot-output .plot-text{
+    color:#a3e635;font-family:'JetBrains Mono',monospace;font-size:13px;white-space:pre-wrap;margin-bottom:12px;
+}
+
 /* SIDEBAR: CAMERA + INFO */
 .sidebar{
     background:var(--surface);
@@ -300,6 +311,7 @@ header{
             </div>
             <pre id="output-text">// Run your code to see output here...</pre>
             <iframe id="browser-output" sandbox="allow-scripts"></iframe>
+            <div id="plot-output"></div>
         </div>
     </div>
 
@@ -340,35 +352,14 @@ header{
 <!-- CODEMIRROR INIT + APP JS -->
 <script>
 // ===== WARNING SOUND FUNCTION =====
-let warningAudioContext = null;
+let warningAudio = null;
 function playWarningSound() {
     try {
-        if (!warningAudioContext) {
-            warningAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (!warningAudio) {
+            warningAudio = new Audio('/static/faaaa.mp3');
         }
-        const oscillator = warningAudioContext.createOscillator();
-        const gainNode = warningAudioContext.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(warningAudioContext.destination);
-        oscillator.frequency.value = 800;
-        oscillator.type = 'square';
-        gainNode.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
-        oscillator.start(warningAudioContext.currentTime);
-        oscillator.stop(warningAudioContext.currentTime + 0.5);
-        // Play second beep
-        setTimeout(() => {
-            const osc2 = warningAudioContext.createOscillator();
-            const gain2 = warningAudioContext.createGain();
-            osc2.connect(gain2);
-            gain2.connect(warningAudioContext.destination);
-            osc2.frequency.value = 600;
-            osc2.type = 'square';
-            gain2.gain.setValueAtTime(0.3, warningAudioContext.currentTime);
-            gain2.gain.exponentialRampToValueAtTime(0.01, warningAudioContext.currentTime + 0.5);
-            osc2.start(warningAudioContext.currentTime);
-            osc2.stop(warningAudioContext.currentTime + 0.5);
-        }, 200);
+        warningAudio.currentTime = 0;
+        warningAudio.play().catch(e => console.log('Audio play error:', e));
     } catch (e) {
         console.log('Warning sound error:', e);
     }
@@ -425,6 +416,7 @@ function runCode() {
     const statusEl = document.getElementById("output-status");
     const outputEl = document.getElementById("output-text");
     const iframeEl = document.getElementById("browser-output");
+    const plotEl = document.getElementById("plot-output");
 
     btn.innerHTML = '<span class="spinner"></span> Running…';
     btn.disabled = true;
@@ -441,22 +433,119 @@ function runCode() {
         btn.innerHTML = "▶ Run";
         btn.disabled = false;
 
+        // Hide all output areas first
+        outputEl.style.display = "none";
+        iframeEl.style.display = "none";
+        plotEl.style.display = "none";
+
         if (data.type === "browser") {
             // HTML or JS → render in iframe
-            outputEl.style.display = "none";
             iframeEl.style.display = "block";
 
             let content = data.code;
             if (LANGUAGE === "JavaScript") {
-                content = `<!DOCTYPE html><html><head><style>body{font-family:sans-serif;padding:10px;}</style></head><body><script>\n${data.code}\n<\/script></body></html>`;
+                // Wrap JS with console capture
+                content = `<!DOCTYPE html>
+<html>
+<head>
+<style>
+body{font-family:'Segoe UI',sans-serif;padding:15px;background:#1a1a2e;color:#a3e635;margin:0;}
+.output{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;}
+.log{color:#a3e635;}
+.error{color:#ef4444;}
+.warn{color:#fbbf24;}
+.info{color:#60a5fa;}
+</style>
+</head>
+<body>
+<div id="console-output" class="output"></div>
+<script>
+(function(){
+    var output = document.getElementById('console-output');
+    function addLine(text, type) {
+        var div = document.createElement('div');
+        div.className = type;
+        div.textContent = text;
+        output.appendChild(div);
+    }
+    var origLog = console.log;
+    var origError = console.error;
+    var origWarn = console.warn;
+    var origInfo = console.info;
+    console.log = function() {
+        var args = Array.from(arguments).map(function(a) {
+            return typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a);
+        }).join(' ');
+        addLine(args, 'log');
+        origLog.apply(console, arguments);
+    };
+    console.error = function() {
+        var args = Array.from(arguments).map(function(a) {
+            return typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a);
+        }).join(' ');
+        addLine('Error: ' + args, 'error');
+        origError.apply(console, arguments);
+    };
+    console.warn = function() {
+        var args = Array.from(arguments).map(function(a) {
+            return typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a);
+        }).join(' ');
+        addLine('Warning: ' + args, 'warn');
+        origWarn.apply(console, arguments);
+    };
+    console.info = function() {
+        var args = Array.from(arguments).map(function(a) {
+            return typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a);
+        }).join(' ');
+        addLine(args, 'info');
+        origInfo.apply(console, arguments);
+    };
+    window.onerror = function(msg, url, line) {
+        addLine('Error at line ' + line + ': ' + msg, 'error');
+        return true;
+    };
+})();
+try {
+${data.code}
+} catch(e) {
+    console.error(e.message);
+}
+<\/script>
+</body>
+</html>`;
             }
             iframeEl.srcdoc = content;
             lastOutput = "[Rendered in browser preview]";
             statusEl.textContent = "✓ Rendered";
             statusEl.className = "output-status ok";
+        } else if (data.type === "plot") {
+            // Matplotlib/Seaborn plots → display images
+            plotEl.style.display = "block";
+            plotEl.innerHTML = "";
+            
+            // Show text output if any
+            if (data.output && data.output.trim()) {
+                const textDiv = document.createElement("div");
+                textDiv.className = "plot-text";
+                textDiv.textContent = data.output;
+                plotEl.appendChild(textDiv);
+            }
+            
+            // Show all plot images
+            if (data.images && data.images.length > 0) {
+                data.images.forEach(function(imgBase64, index) {
+                    const img = document.createElement("img");
+                    img.src = "data:image/png;base64," + imgBase64;
+                    img.alt = "Plot " + (index + 1);
+                    plotEl.appendChild(img);
+                });
+            }
+            
+            lastOutput = "[Plot generated]";
+            statusEl.textContent = "✓ Plot Generated";
+            statusEl.className = "output-status ok";
         } else {
             outputEl.style.display = "block";
-            iframeEl.style.display = "none";
             const out = data.output || "(no output)";
             lastOutput = out;
             outputEl.textContent = out;
@@ -621,6 +710,13 @@ document.addEventListener("visibilitychange", () => {
 // =========== KEYBOARD RESTRICTIONS ===========
 document.addEventListener("contextmenu", e => e.preventDefault());
 document.addEventListener("keydown", e => {
+    // Block volume control keys (mute, volume up, volume down)
+    if (e.key === "AudioVolumeMute" || e.key === "AudioVolumeDown" || e.key === "AudioVolumeUp" ||
+        e.keyCode === 173 || e.keyCode === 174 || e.keyCode === 175) {
+        e.preventDefault();
+        alert("⚠ Volume controls are disabled during the exam!");
+        return false;
+    }
     // Allow normal coding keys - only block DevTools / refresh
     if (e.key === "F12" || (e.ctrlKey && e.shiftKey && e.key === "I")) {
         e.preventDefault();
