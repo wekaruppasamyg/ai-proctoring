@@ -573,15 +573,19 @@ faceMesh.setOptions({
     minTrackingConfidence: 0.6   // Increased for better accuracy
 });
 faceMesh.onResults(results => {
+    // Get block overlay element
+    const blockOverlay = document.getElementById("block-overlay");
+    
     // ===== MULTIPLE PERSON DETECTION (Frontend) =====
     const numFaces = results.multiFaceLandmarks ? results.multiFaceLandmarks.length : 0;
     
     if (numFaces > 1) {
         multiFaceFrames++;
         if (multiFaceFrames >= MULTI_FACE_THRESHOLD) {
-            // Multiple faces confirmed - trigger alert
+            // Multiple faces confirmed - trigger alert and BLOCK SCREEN
             cheatMessage.innerHTML = `❌ Another person detected! (${numFaces} faces)`;
             cheatMessage.style.display = 'block';
+            if (blockOverlay) blockOverlay.style.display = 'flex';
             playWarningSound();
             // Notify backend
             fetch("/monitor-exam", {
@@ -595,6 +599,7 @@ faceMesh.onResults(results => {
         multiFaceFrames = Math.max(0, multiFaceFrames - 1); // Gradually decrease
         if (numFaces === 1) {
             cheatMessage.style.display = 'none';
+            if (blockOverlay) blockOverlay.style.display = 'none';
         }
     }
     
@@ -608,12 +613,14 @@ faceMesh.onResults(results => {
             lookingAwayFrames = 0;
         }
         if (lookingAwayFrames > LOOKING_AWAY_THRESHOLD) {
+            playWarningSound();
             errorMessage.style.display = 'block';
             fetch("/monitor-exam", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ image: null, event: "looking_away" })
             }).catch(()=>{});
+            lookingAwayFrames = 0; // Reset to allow counting next occurrence
         } else {
             errorMessage.style.display = 'none';
         }
@@ -780,8 +787,18 @@ faceMesh.onResults(results => {
         }
 
     } else {
-        errorMessage.style.display = 'none';
-        lookingAwayFrames = 0;
+        // No face detected - student might have moved away
+        lookingAwayFrames++;
+        if (lookingAwayFrames > 30) {
+            playWarningSound();
+            errorMessage.style.display = 'block';
+            fetch('/monitor-exam', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event: 'looking_away' })
+            }).catch(() => {});
+            lookingAwayFrames = 0;
+        }
         eyeTrackerMessage.style.display = 'none';
         eyeTrackingFrames = 0;
         eyeViolationLogged = false;

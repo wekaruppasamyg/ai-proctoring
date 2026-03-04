@@ -707,21 +707,7 @@ let lastBlinkTime = Date.now();
 let eyeClosed = false;
 const BLINK_EAR_THRESHOLD = 0.22;
 
-// Start camera
-navigator.mediaDevices.getUserMedia({video: true, audio: false})
-    .then(stream => { 
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-            // Start FaceMesh after video loads
-            startFaceMeshDetection();
-            startHandsDetection();
-        };
-    })
-    .catch(() => {
-        document.getElementById("cam-status-dot").textContent = "● No Camera";
-        document.getElementById("cam-status-dot").classList.add("warning");
-    });
-
+// Helper functions
 function isCameraHidden(canvas) {
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let total = 0;
@@ -751,154 +737,161 @@ function isLookingAway(landmarks) {
     return false;
 }
 
-// ===== FACEMESH DETECTION =====
-let faceMesh = null;
-function startFaceMeshDetection() {
-    faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-    faceMesh.setOptions({
-        maxNumFaces: 4,  // Detect multiple faces
-        refineLandmarks: true,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6
-    });
-    
-    faceMesh.onResults(results => {
-        const numFaces = results.multiFaceLandmarks ? results.multiFaceLandmarks.length : 0;
-        
-        // Multiple person detection
-        if (numFaces > 1) {
-            multiFaceFrames++;
-            if (multiFaceFrames >= MULTI_FACE_THRESHOLD) {
-                playWarningSound();
-                vCheat++;
-                updateViolationUI();
-                cheatAlert.innerHTML = `❌ Multiple people detected! (${numFaces} faces)`;
-                cheatAlert.style.display = "block";
-                blockOverlay.style.display = "flex";
-                fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
-                    body: JSON.stringify({event: "multiple_persons", face_count: numFaces})
-                }).then(r => r.json()).then(d => {
-                    if (d.status === "terminated") {
-                        alert("Exam terminated due to cheating!");
-                    }
-                });
-                multiFaceFrames = 0;
-            }
-        } else {
-            multiFaceFrames = Math.max(0, multiFaceFrames - 1);
-            if (numFaces === 1) {
-                cheatAlert.style.display = "none";
-                blockOverlay.style.display = "none";
-            }
-        }
-        
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-            const landmarks = results.multiFaceLandmarks[0];
-            
-            // Looking away detection
-            if (isLookingAway(landmarks)) {
-                lookingAwayFrames++;
-            } else {
-                lookingAwayFrames = 0;
-            }
-            
-            if (lookingAwayFrames > LOOKING_AWAY_THRESHOLD) {
-                playWarningSound();
-                vLook++;
-                updateViolationUI();
-                fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
-                    body: JSON.stringify({event: "looking_away"})
-                }).catch(()=>{});
-                lookingAwayFrames = 0;
-            }
-            
-            // Blink detection (EAR)
-            try {
-                const leftV = euclidean(landmarks[159], landmarks[145]);
-                const leftH = euclidean(landmarks[33], landmarks[133]);
-                const rightV = euclidean(landmarks[386], landmarks[374]);
-                const rightH = euclidean(landmarks[362], landmarks[263]);
-                const ear = (leftV + rightV) / (leftH + rightH);
-                
-                if (ear < BLINK_EAR_THRESHOLD) {
-                    if (!eyeClosed) eyeClosed = true;
-                } else {
-                    if (eyeClosed) {
-                        lastBlinkTime = Date.now();
-                        eyeClosed = false;
-                    }
-                }
-            } catch(e) {}
-        } else if (numFaces === 0) {
-            // No face - camera might be hidden or looking away
-            lookingAwayFrames++;
-            if (lookingAwayFrames > 30) {
-                vLook++;
-                updateViolationUI();
-                fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
-                    body: JSON.stringify({event: "looking_away"})
-                }).catch(()=>{});
-                lookingAwayFrames = 0;
-            }
-        }
-    });
-    
-    // Process video frames
-    async function detectLoop() {
-        if (video.readyState >= 2 && faceMesh) {
-            await faceMesh.send({image: video});
-        }
-        requestAnimationFrame(detectLoop);
-    }
-    detectLoop();
-}
+// ===== FACEMESH SETUP (Same as quiz exam) =====
+const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+faceMesh.setOptions({
+    maxNumFaces: 4,  // Detect multiple faces
+    refineLandmarks: true,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.6
+});
 
-// ===== HANDS DETECTION =====
-let hands = null;
-function startHandsDetection() {
-    hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-    hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6
-    });
+faceMesh.onResults(results => {
+    const numFaces = results.multiFaceLandmarks ? results.multiFaceLandmarks.length : 0;
     
-    hands.onResults(results => {
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            // Check if hand is covering face (near center of frame)
-            for (const handLandmarks of results.multiHandLandmarks) {
-                const wrist = handLandmarks[0];
-                const middleTip = handLandmarks[12];
-                
-                // Hand is in upper-center of frame (covering face)
-                if (wrist.y < 0.6 && middleTip.y < 0.5 && 
-                    wrist.x > 0.2 && wrist.x < 0.8) {
-                    handCoverFrames++;
-                    if (handCoverFrames > HAND_COVER_THRESHOLD) {
-                        playWarningSound();
-                        vHand++;
-                        updateViolationUI();
-                        fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
-                            body: JSON.stringify({event: "hand_cover"})
-                        }).catch(()=>{});
-                        handCoverFrames = 0;
-                    }
-                    return;
+    // Multiple person detection with screen block
+    if (numFaces > 1) {
+        multiFaceFrames++;
+        if (multiFaceFrames >= MULTI_FACE_THRESHOLD) {
+            playWarningSound();
+            vCheat++;
+            updateViolationUI();
+            cheatAlert.innerHTML = `❌ Multiple people detected! (${numFaces} faces)`;
+            cheatAlert.style.display = "block";
+            blockOverlay.style.display = "flex";
+            fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({event: "multiple_persons", face_count: numFaces})
+            }).then(r => r.json()).then(d => {
+                if (d.status === "terminated") {
+                    alert("Exam terminated due to cheating!");
+                }
+            }).catch(()=>{});
+            multiFaceFrames = 0;
+        }
+    } else {
+        multiFaceFrames = Math.max(0, multiFaceFrames - 1);
+        if (numFaces === 1) {
+            cheatAlert.style.display = "none";
+            blockOverlay.style.display = "none";
+        }
+    }
+    
+    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+        
+        // Looking away detection
+        if (isLookingAway(landmarks)) {
+            lookingAwayFrames++;
+        } else {
+            lookingAwayFrames = 0;
+        }
+        
+        if (lookingAwayFrames > LOOKING_AWAY_THRESHOLD) {
+            playWarningSound();
+            vLook++;
+            updateViolationUI();
+            fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({event: "looking_away"})
+            }).catch(()=>{});
+            lookingAwayFrames = 0;
+        }
+        
+        // Blink detection (EAR)
+        try {
+            const leftV = euclidean(landmarks[159], landmarks[145]);
+            const leftH = euclidean(landmarks[33], landmarks[133]);
+            const rightV = euclidean(landmarks[386], landmarks[374]);
+            const rightH = euclidean(landmarks[362], landmarks[263]);
+            const ear = (leftV + rightV) / (leftH + rightH);
+            
+            if (ear < BLINK_EAR_THRESHOLD) {
+                if (!eyeClosed) eyeClosed = true;
+            } else {
+                if (eyeClosed) {
+                    lastBlinkTime = Date.now();
+                    eyeClosed = false;
                 }
             }
+        } catch(e) {}
+    } else if (numFaces === 0) {
+        // No face - camera might be hidden or looking away
+        lookingAwayFrames++;
+        if (lookingAwayFrames > 30) {
+            playWarningSound();
+            vLook++;
+            updateViolationUI();
+            fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({event: "looking_away"})
+            }).catch(()=>{});
+            lookingAwayFrames = 0;
         }
-        handCoverFrames = Math.max(0, handCoverFrames - 1);
-    });
-    
-    async function handsLoop() {
-        if (video.readyState >= 2 && hands) {
-            await hands.send({image: video});
-        }
-        setTimeout(handsLoop, 200); // Check every 200ms
     }
-    handsLoop();
-}
+});
+
+// ===== HANDS SETUP (Same as quiz exam) =====
+const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+});
+
+hands.onResults(results => {
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        let handCovering = false;
+        for (const landmarks of results.multiHandLandmarks) {
+            // Check if palm center is in center area of frame
+            const palmCenterX = (landmarks[0].x + landmarks[5].x + landmarks[17].x) / 3;
+            const palmCenterY = (landmarks[0].y + landmarks[5].y + landmarks[17].y) / 3;
+            
+            // If hand is in center 80% of frame (covering face)
+            if (palmCenterX > 0.1 && palmCenterX < 0.9 && 
+                palmCenterY > 0.1 && palmCenterY < 0.9) {
+                handCovering = true;
+                break;
+            }
+        }
+        
+        if (handCovering) {
+            handCoverFrames++;
+        } else {
+            handCoverFrames = 0;
+        }
+        
+        if (handCoverFrames > HAND_COVER_THRESHOLD) {
+            playWarningSound();
+            vHand++;
+            updateViolationUI();
+            fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({event: "hand_cover"})
+            }).catch(()=>{});
+            handCoverFrames = 0;
+        }
+    } else {
+        handCoverFrames = Math.max(0, handCoverFrames - 1);
+    }
+});
+
+// ===== CAMERA UTILITY (Same method as quiz exam) =====
+navigator.mediaDevices.getUserMedia({video: true, audio: false})
+    .then(stream => { 
+        video.srcObject = stream;
+    })
+    .catch(() => {
+        document.getElementById("cam-status-dot").textContent = "● No Camera";
+        document.getElementById("cam-status-dot").classList.add("warning");
+    });
+
+const camera = new Camera(video, {
+    onFrame: async () => {
+        await faceMesh.send({image: video});
+        await hands.send({image: video});
+    },
+    width: 640,
+    height: 480
+});
+camera.start();
 
 // No blink check every second
 setInterval(() => {
