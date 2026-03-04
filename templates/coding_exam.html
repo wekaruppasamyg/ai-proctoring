@@ -231,6 +231,49 @@ header{
 }
 .success-card a:hover{transform:scale(1.04);box-shadow:0 8px 24px rgba(139,92,246,0.4);}
 
+/* OUTPUT POPUP MODAL */
+#output-modal{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);
+    z-index:9997;align-items:center;justify-content:center;
+}
+#output-modal.show{display:flex;}
+.output-modal-card{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:20px;width:90%;max-width:700px;max-height:85vh;
+    display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,0.6);animation:fadeUp .3s ease;
+}
+.output-modal-header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 20px;border-bottom:1px solid var(--border);
+    background:var(--surface2);
+}
+.output-modal-header h3{font-size:16px;font-weight:600;color:var(--text);margin:0;}
+.output-modal-header .status-badge{font-size:12px;padding:4px 12px;border-radius:20px;}
+.output-modal-header .status-badge.success{background:rgba(16,185,129,0.2);color:var(--green);}
+.output-modal-header .status-badge.error{background:rgba(239,68,68,0.2);color:var(--red);}
+.output-modal-header .status-badge.running{background:rgba(139,92,246,0.2);color:var(--primary);}
+.output-modal-close{
+    background:none;border:none;color:var(--muted);font-size:24px;
+    cursor:pointer;padding:4px 8px;transition:.2s;
+}
+.output-modal-close:hover{color:var(--red);}
+.output-modal-body{
+    flex:1;overflow-y:auto;padding:20px;
+    font-family:'JetBrains Mono','Courier New',monospace;
+    font-size:14px;line-height:1.7;color:#a3e635;
+    background:#0d1117;white-space:pre-wrap;
+}
+.output-modal-body.error-text{color:var(--red);}
+.output-modal-body img{
+    max-width:100%;border-radius:8px;margin:12px 0;
+    box-shadow:0 4px 12px rgba(0,0,0,0.3);
+}
+.output-modal-body iframe{
+    width:100%;height:400px;border:none;border-radius:8px;
+    background:#fff;
+}
+
 /* SPINNER */
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -281,6 +324,20 @@ header{
     </div>
 </div>
 
+<!-- OUTPUT POPUP MODAL -->
+<div id="output-modal">
+    <div class="output-modal-card">
+        <div class="output-modal-header">
+            <h3>📤 Output</h3>
+            <span class="status-badge" id="output-modal-status">Ready</span>
+            <button class="output-modal-close" onclick="closeOutputModal()">&times;</button>
+        </div>
+        <div class="output-modal-body" id="output-modal-body">
+            // Run your code to see output here...
+        </div>
+    </div>
+</div>
+
 <!-- MAIN LAYOUT -->
 <div class="layout">
 
@@ -303,8 +360,8 @@ header{
             <textarea id="editor">{{ starter_code | default('') }}</textarea>
         </div>
 
-        <!-- OUTPUT -->
-        <div class="output-panel">
+        <!-- OUTPUT (hidden - using popup instead) -->
+        <div class="output-panel" style="display:none;">
             <div class="output-header">
                 <span>Output</span>
                 <span class="output-status" id="output-status"></span>
@@ -348,6 +405,11 @@ header{
     </div>
 
 </div>
+
+<!-- MediaPipe Scripts for Face & Hand Detection -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
 <!-- CODEMIRROR INIT + APP JS -->
 <script>
@@ -407,21 +469,43 @@ const editor = CodeMirror.fromTextArea(document.getElementById("editor"), {
 });
 editor.setSize("100%", "100%");
 
+// =========== OUTPUT MODAL CONTROLS ===========
+function openOutputModal() {
+    document.getElementById("output-modal").classList.add("show");
+}
+function closeOutputModal() {
+    document.getElementById("output-modal").classList.remove("show");
+}
+// Close modal on background click
+document.addEventListener("click", function(e) {
+    if (e.target.id === "output-modal") {
+        closeOutputModal();
+    }
+});
+// Close modal on Escape key
+document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") {
+        closeOutputModal();
+    }
+});
+
 // =========== RUN CODE ===========
 let lastOutput = "";
 
 function runCode() {
     const code = editor.getValue();
     const btn = document.getElementById("run-btn");
-    const statusEl = document.getElementById("output-status");
-    const outputEl = document.getElementById("output-text");
-    const iframeEl = document.getElementById("browser-output");
-    const plotEl = document.getElementById("plot-output");
+    const modalBody = document.getElementById("output-modal-body");
+    const modalStatus = document.getElementById("output-modal-status");
 
     btn.innerHTML = '<span class="spinner"></span> Running…';
     btn.disabled = true;
-    statusEl.textContent = "running…";
-    statusEl.className = "output-status running";
+    
+    // Show modal with loading state
+    modalBody.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">⏳ Running your code...</div>';
+    modalStatus.textContent = "Running...";
+    modalStatus.className = "status-badge running";
+    openOutputModal();
 
     fetch("/run-code", {
         method: "POST",
@@ -433,15 +517,8 @@ function runCode() {
         btn.innerHTML = "▶ Run";
         btn.disabled = false;
 
-        // Hide all output areas first
-        outputEl.style.display = "none";
-        iframeEl.style.display = "none";
-        plotEl.style.display = "none";
-
         if (data.type === "browser") {
-            // HTML or JS → render in iframe
-            iframeEl.style.display = "block";
-
+            // HTML or JS → render in iframe inside modal
             let content = data.code;
             if (LANGUAGE === "JavaScript") {
                 // Wrap JS with console capture
@@ -449,7 +526,7 @@ function runCode() {
 <html>
 <head>
 <style>
-body{font-family:'Segoe UI',sans-serif;padding:15px;background:#1a1a2e;color:#a3e635;margin:0;}
+body{font-family:'Segoe UI',sans-serif;padding:15px;background:#0d1117;color:#a3e635;margin:0;}
 .output{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;}
 .log{color:#a3e635;}
 .error{color:#ef4444;}
@@ -514,59 +591,57 @@ ${data.code}
 </body>
 </html>`;
             }
-            iframeEl.srcdoc = content;
+            modalBody.innerHTML = '<iframe sandbox="allow-scripts" style="width:100%;height:400px;border:none;border-radius:8px;background:#fff;"></iframe>';
+            modalBody.querySelector("iframe").srcdoc = content;
             lastOutput = "[Rendered in browser preview]";
-            statusEl.textContent = "✓ Rendered";
-            statusEl.className = "output-status ok";
+            modalStatus.textContent = "✓ Rendered";
+            modalStatus.className = "status-badge success";
+            
         } else if (data.type === "plot") {
-            // Matplotlib/Seaborn plots → display images
-            plotEl.style.display = "block";
-            plotEl.innerHTML = "";
+            // Matplotlib/Seaborn plots → display images in modal
+            let html = "";
             
             // Show text output if any
             if (data.output && data.output.trim()) {
-                const textDiv = document.createElement("div");
-                textDiv.className = "plot-text";
-                textDiv.textContent = data.output;
-                plotEl.appendChild(textDiv);
+                html += '<div style="color:#a3e635;margin-bottom:12px;white-space:pre-wrap;">' + data.output + '</div>';
             }
             
             // Show all plot images
             if (data.images && data.images.length > 0) {
                 data.images.forEach(function(imgBase64, index) {
-                    const img = document.createElement("img");
-                    img.src = "data:image/png;base64," + imgBase64;
-                    img.alt = "Plot " + (index + 1);
-                    plotEl.appendChild(img);
+                    html += '<img src="data:image/png;base64,' + imgBase64 + '" alt="Plot ' + (index + 1) + '" style="max-width:100%;border-radius:8px;margin:8px 0;">';
                 });
             }
             
+            modalBody.innerHTML = html || "(No output)";
             lastOutput = "[Plot generated]";
-            statusEl.textContent = "✓ Plot Generated";
-            statusEl.className = "output-status ok";
+            modalStatus.textContent = "✓ Plot Generated";
+            modalStatus.className = "status-badge success";
+            
         } else {
-            outputEl.style.display = "block";
+            // Console output
             const out = data.output || "(no output)";
             lastOutput = out;
-            outputEl.textContent = out;
+            modalBody.textContent = out;
+            
             if (data.is_error) {
-                outputEl.className = "error-text";
-                statusEl.textContent = "✗ Error";
-                statusEl.className = "output-status err";
+                modalBody.className = "output-modal-body error-text";
+                modalStatus.textContent = "✗ Error";
+                modalStatus.className = "status-badge error";
             } else {
-                outputEl.className = "";
-                statusEl.textContent = "✓ Success";
-                statusEl.className = "output-status ok";
+                modalBody.className = "output-modal-body";
+                modalStatus.textContent = "✓ Success";
+                modalStatus.className = "status-badge success";
             }
         }
     })
     .catch(err => {
         btn.innerHTML = "▶ Run";
         btn.disabled = false;
-        outputEl.textContent = "Network error: " + err;
-        outputEl.className = "error-text";
-        statusEl.textContent = "✗ Error";
-        statusEl.className = "output-status err";
+        modalBody.textContent = "Network error: " + err;
+        modalBody.className = "output-modal-body error-text";
+        modalStatus.textContent = "✗ Error";
+        modalStatus.className = "status-badge error";
     });
 }
 
@@ -599,7 +674,7 @@ function clearEditor() {
     }
 }
 
-// =========== CAMERA MONITORING (same as MCQ exam) ===========
+// =========== CAMERA MONITORING WITH MEDIAPIPE ===========
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -608,7 +683,7 @@ const cameraHiddenMsg = document.getElementById("camera-hidden-msg");
 const blockOverlay = document.getElementById("block-overlay");
 
 // Violation counters
-let vLook = 0, vTab = 0, vCam = 0, vHand = 0, vCheat = 0;
+let vLook = 0, vTab = 0, vCam = 0, vHand = 0, vCheat = 0, vNoBlink = 0;
 function updateViolationUI() {
     document.getElementById("v-look").textContent = vLook;
     document.getElementById("v-tab").textContent = vTab;
@@ -621,9 +696,27 @@ function updateViolationUI() {
     });
 }
 
+// Detection state variables
+let lookingAwayFrames = 0;
+const LOOKING_AWAY_THRESHOLD = 15;
+let multiFaceFrames = 0;
+const MULTI_FACE_THRESHOLD = 5;
+let handCoverFrames = 0;
+const HAND_COVER_THRESHOLD = 30;
+let lastBlinkTime = Date.now();
+let eyeClosed = false;
+const BLINK_EAR_THRESHOLD = 0.22;
+
 // Start camera
 navigator.mediaDevices.getUserMedia({video: true, audio: false})
-    .then(stream => { video.srcObject = stream; })
+    .then(stream => { 
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+            // Start FaceMesh after video loads
+            startFaceMeshDetection();
+            startHandsDetection();
+        };
+    })
     .catch(() => {
         document.getElementById("cam-status-dot").textContent = "● No Camera";
         document.getElementById("cam-status-dot").classList.add("warning");
@@ -636,50 +729,203 @@ function isCameraHidden(canvas) {
     return (total / (data.length / 4)) < 50;
 }
 
-// Monitor every 5 seconds
+function euclidean(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function isLookingAway(landmarks) {
+    const nose = landmarks[1];
+    const leftEye = landmarks[33];
+    const rightEye = landmarks[263];
+    // Check if nose is outside eye range (turned away)
+    if (nose.x < leftEye.x - 0.05 || nose.x > rightEye.x + 0.05) {
+        return true;
+    }
+    // Check for looking down/up
+    const leftEyeTop = landmarks[159];
+    const leftEyeBottom = landmarks[145];
+    const eyeCenter = (leftEyeTop.y + leftEyeBottom.y) / 2;
+    if (nose.y < eyeCenter - 0.15 || nose.y > eyeCenter + 0.15) {
+        return true;
+    }
+    return false;
+}
+
+// ===== FACEMESH DETECTION =====
+let faceMesh = null;
+function startFaceMeshDetection() {
+    faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+    faceMesh.setOptions({
+        maxNumFaces: 4,  // Detect multiple faces
+        refineLandmarks: true,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+    });
+    
+    faceMesh.onResults(results => {
+        const numFaces = results.multiFaceLandmarks ? results.multiFaceLandmarks.length : 0;
+        
+        // Multiple person detection
+        if (numFaces > 1) {
+            multiFaceFrames++;
+            if (multiFaceFrames >= MULTI_FACE_THRESHOLD) {
+                playWarningSound();
+                vCheat++;
+                updateViolationUI();
+                cheatAlert.innerHTML = `❌ Multiple people detected! (${numFaces} faces)`;
+                cheatAlert.style.display = "block";
+                blockOverlay.style.display = "flex";
+                fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                    body: JSON.stringify({event: "multiple_persons", face_count: numFaces})
+                }).then(r => r.json()).then(d => {
+                    if (d.status === "terminated") {
+                        alert("Exam terminated due to cheating!");
+                    }
+                });
+                multiFaceFrames = 0;
+            }
+        } else {
+            multiFaceFrames = Math.max(0, multiFaceFrames - 1);
+            if (numFaces === 1) {
+                cheatAlert.style.display = "none";
+                blockOverlay.style.display = "none";
+            }
+        }
+        
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            const landmarks = results.multiFaceLandmarks[0];
+            
+            // Looking away detection
+            if (isLookingAway(landmarks)) {
+                lookingAwayFrames++;
+            } else {
+                lookingAwayFrames = 0;
+            }
+            
+            if (lookingAwayFrames > LOOKING_AWAY_THRESHOLD) {
+                playWarningSound();
+                vLook++;
+                updateViolationUI();
+                fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                    body: JSON.stringify({event: "looking_away"})
+                }).catch(()=>{});
+                lookingAwayFrames = 0;
+            }
+            
+            // Blink detection (EAR)
+            try {
+                const leftV = euclidean(landmarks[159], landmarks[145]);
+                const leftH = euclidean(landmarks[33], landmarks[133]);
+                const rightV = euclidean(landmarks[386], landmarks[374]);
+                const rightH = euclidean(landmarks[362], landmarks[263]);
+                const ear = (leftV + rightV) / (leftH + rightH);
+                
+                if (ear < BLINK_EAR_THRESHOLD) {
+                    if (!eyeClosed) eyeClosed = true;
+                } else {
+                    if (eyeClosed) {
+                        lastBlinkTime = Date.now();
+                        eyeClosed = false;
+                    }
+                }
+            } catch(e) {}
+        } else if (numFaces === 0) {
+            // No face - camera might be hidden or looking away
+            lookingAwayFrames++;
+            if (lookingAwayFrames > 30) {
+                vLook++;
+                updateViolationUI();
+                fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                    body: JSON.stringify({event: "looking_away"})
+                }).catch(()=>{});
+                lookingAwayFrames = 0;
+            }
+        }
+    });
+    
+    // Process video frames
+    async function detectLoop() {
+        if (video.readyState >= 2 && faceMesh) {
+            await faceMesh.send({image: video});
+        }
+        requestAnimationFrame(detectLoop);
+    }
+    detectLoop();
+}
+
+// ===== HANDS DETECTION =====
+let hands = null;
+function startHandsDetection() {
+    hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+    });
+    
+    hands.onResults(results => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            // Check if hand is covering face (near center of frame)
+            for (const handLandmarks of results.multiHandLandmarks) {
+                const wrist = handLandmarks[0];
+                const middleTip = handLandmarks[12];
+                
+                // Hand is in upper-center of frame (covering face)
+                if (wrist.y < 0.6 && middleTip.y < 0.5 && 
+                    wrist.x > 0.2 && wrist.x < 0.8) {
+                    handCoverFrames++;
+                    if (handCoverFrames > HAND_COVER_THRESHOLD) {
+                        playWarningSound();
+                        vHand++;
+                        updateViolationUI();
+                        fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+                            body: JSON.stringify({event: "hand_cover"})
+                        }).catch(()=>{});
+                        handCoverFrames = 0;
+                    }
+                    return;
+                }
+            }
+        }
+        handCoverFrames = Math.max(0, handCoverFrames - 1);
+    });
+    
+    async function handsLoop() {
+        if (video.readyState >= 2 && hands) {
+            await hands.send({image: video});
+        }
+        setTimeout(handsLoop, 200); // Check every 200ms
+    }
+    handsLoop();
+}
+
+// No blink check every second
+setInterval(() => {
+    if (Date.now() - lastBlinkTime > 20000) {
+        vNoBlink++;
+        fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({event: "no_blink"})
+        }).catch(()=>{});
+        lastBlinkTime = Date.now(); // Reset to avoid spam
+    }
+}, 1000);
+
+// Camera hidden check every 2 seconds
 setInterval(() => {
     if (!video.srcObject) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
     if (isCameraHidden(canvas)) {
         cameraHiddenMsg.style.display = "flex";
+        vCam++;
+        updateViolationUI();
         fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({event:"camera_hidden"})})
-            .then(r => r.json()).then(d => { vCam = d.camera_hidden_count || vCam; updateViolationUI(); });
-        return;
+            body: JSON.stringify({event: "camera_hidden"})
+        }).catch(()=>{});
     } else {
         cameraHiddenMsg.style.display = "none";
     }
-
-    const imageData = canvas.toDataURL("image/jpeg");
-    fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({image: imageData})})
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === "cheating") {
-            playWarningSound();
-            vCheat = data.cheating_count || vCheat;
-            updateViolationUI();
-            cheatAlert.innerHTML = `❌ Multiple people detected! Count: ${data.cheating_count}/10`;
-            cheatAlert.style.display = "block";
-            blockOverlay.style.display = "flex";
-        } else if (data.status === "terminated") {
-            playWarningSound();
-            cheatAlert.innerHTML = `❌ Exam terminated!`;
-            cheatAlert.style.display = "block";
-            blockOverlay.style.display = "flex";
-            alert("Your coding exam has been terminated due to cheating.");
-        } else if (data.status === "look-away") {
-            vLook = data.looking_away_count || vLook;
-            updateViolationUI();
-            cheatAlert.style.display = "none";
-            blockOverlay.style.display = "none";
-        } else {
-            cheatAlert.style.display = "none";
-            blockOverlay.style.display = "none";
-        }
-    });
-}, 5000);
+}, 2000);
 
 // MJPEG live stream to admin
 function sendLiveFrame() {
