@@ -916,16 +916,14 @@ def submit_exam():
         total_questions += 1
 
     # ===== MALPRACTICE PENALTY SYSTEM =====
-    # Calculate total malpractice violations
+    # Calculate total malpractice violations (excluding head movement, eye tracker - warning only)
     total_malpractice = (
         cheating_count + 
         looking_away_count + 
         tab_switch_count + 
         camera_hidden_count + 
-        hand_cover_count + 
-        no_blink_count + 
-        eye_tracker_count + 
-        head_movement_count
+        hand_cover_count +
+        no_blink_count
     )
     
     # Deduct 1 mark for each malpractice violation
