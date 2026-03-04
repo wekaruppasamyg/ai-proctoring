@@ -906,13 +906,15 @@ setInterval(() => {
     }
 }, 1000);
 
-// ===== NOISE/SURROUNDING SOUND DETECTION =====
+// ===== NOISE/SPEECH DETECTION (Human speech frequency range: 300Hz-3400Hz) =====
 // noiseDetected is declared above with other detection state variables
 let audioContext = null;
 let analyser = null;
-const NOISE_THRESHOLD = 70; // Adjust sensitivity (higher = less sensitive)
+const SPEECH_THRESHOLD = 28; // Lower = more sensitive to human voice
 let noiseFrames = 0;
-const NOISE_FRAME_THRESHOLD = 30; // Consecutive frames to confirm noise
+const NOISE_FRAME_THRESHOLD = 10; // Fast detection (~0.3s)
+let noiseCooldownFrames = 0;
+const NOISE_COOLDOWN_THRESHOLD = 50; // Hold block for ~1.5s of silence before unblocking
 
 navigator.mediaDevices.getUserMedia({ audio: true })
     .then(audioStream => {
@@ -920,40 +922,47 @@ navigator.mediaDevices.getUserMedia({ audio: true })
         analyser = audioContext.createAnalyser();
         const microphone = audioContext.createMediaStreamSource(audioStream);
         microphone.connect(analyser);
-        analyser.fftSize = 256;
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        
+        analyser.fftSize = 512;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
         function checkNoise() {
             if (!analyser) return;
             analyser.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < bufferLength; i++) {
-                sum += dataArray[i];
-            }
-            const average = sum / bufferLength;
-            
-            if (average > NOISE_THRESHOLD) {
+
+            // Focus only on human speech frequency band (300Hz – 3400Hz)
+            const hzPerBin = audioContext.sampleRate / analyser.fftSize;
+            const speechStart = Math.floor(300 / hzPerBin);
+            const speechEnd   = Math.floor(3400 / hzPerBin);
+            let speechSum = 0;
+            for (let i = speechStart; i < speechEnd; i++) speechSum += dataArray[i];
+            const speechAvg = speechSum / (speechEnd - speechStart);
+
+            if (speechAvg > SPEECH_THRESHOLD) {
                 noiseFrames++;
+                noiseCooldownFrames = 0;
                 if (noiseFrames >= NOISE_FRAME_THRESHOLD && !noiseDetected) {
                     noiseDetected = true;
+                    playWarningSound();
                     blockOverlay.style.display = 'flex';
-                    document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
-                    document.querySelector('#block-overlay p').innerHTML = 'Surrounding noise/sound detected!<br>Please ensure a quiet environment to continue.';
+                    document.querySelector('#block-overlay h2').textContent = '🔊 Exam Blocked';
+                    document.querySelector('#block-overlay p').innerHTML = 'Human Voice / Noise Detected!<br>Please ensure a quiet environment to continue.';
                     fetch('/monitor-exam', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ event: 'noise_detected', level: average })
+                        body: JSON.stringify({ event: 'noise_detected', level: speechAvg })
                     }).catch(()=>{});
                 }
             } else {
                 noiseFrames = Math.max(0, noiseFrames - 1);
-                if (noiseFrames === 0 && noiseDetected) {
-                    noiseDetected = false;
-                    blockOverlay.style.display = 'none';
-                    // Reset to default message
-                    document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
-                    document.querySelector('#block-overlay p').innerHTML = 'Another person or cheating activity detected.<br>Please ensure only you are visible to continue.';
+                if (noiseDetected) {
+                    noiseCooldownFrames++;
+                    if (noiseCooldownFrames >= NOISE_COOLDOWN_THRESHOLD) {
+                        noiseDetected = false;
+                        noiseCooldownFrames = 0;
+                        blockOverlay.style.display = 'none';
+                        document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
+                        document.querySelector('#block-overlay p').innerHTML = 'Another person or cheating activity detected.<br>Please ensure only you are visible to continue.';
+                    }
                 }
             }
             requestAnimationFrame(checkNoise);
