@@ -707,6 +707,9 @@ let lastBlinkTime = Date.now();
 let eyeClosed = false;
 const BLINK_EAR_THRESHOLD = 0.22;
 
+// Noise detection state (shared with noise detection code below)
+let noiseDetected = false;
+
 // Helper functions
 function isCameraHidden(canvas) {
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -759,6 +762,8 @@ faceMesh.onResults(results => {
             cheatAlert.innerHTML = `❌ Multiple people detected! (${numFaces} faces)`;
             cheatAlert.style.display = "block";
             blockOverlay.style.display = "flex";
+            document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
+            document.querySelector('#block-overlay p').innerHTML = `Another person detected! (${numFaces} faces)<br>Please ensure only you are visible to continue.`;
             fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
                 body: JSON.stringify({event: "multiple_persons", face_count: numFaces})
             }).then(r => r.json()).then(d => {
@@ -770,7 +775,7 @@ faceMesh.onResults(results => {
         }
     } else {
         multiFaceFrames = Math.max(0, multiFaceFrames - 1);
-        if (numFaces === 1) {
+        if (numFaces === 1 && !noiseDetected) {
             cheatAlert.style.display = "none";
             blockOverlay.style.display = "none";
         }
@@ -902,12 +907,12 @@ setInterval(() => {
 }, 1000);
 
 // ===== NOISE/SURROUNDING SOUND DETECTION =====
-let noiseDetected = false;
+// noiseDetected is declared above with other detection state variables
 let audioContext = null;
 let analyser = null;
-const NOISE_THRESHOLD = 50; // Adjust sensitivity (higher = less sensitive)
+const NOISE_THRESHOLD = 70; // Adjust sensitivity (higher = less sensitive)
 let noiseFrames = 0;
-const NOISE_FRAME_THRESHOLD = 15; // Consecutive frames to confirm noise
+const NOISE_FRAME_THRESHOLD = 30; // Consecutive frames to confirm noise
 
 navigator.mediaDevices.getUserMedia({ audio: true })
     .then(audioStream => {
@@ -933,8 +938,8 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                 if (noiseFrames >= NOISE_FRAME_THRESHOLD && !noiseDetected) {
                     noiseDetected = true;
                     blockOverlay.style.display = 'flex';
-                    document.querySelector('#block-overlay h2').textContent = '⚠️ Noise Detected';
-                    document.querySelector('#block-overlay p').innerHTML = 'Surrounding noise/sound detected.<br>Please ensure a quiet environment to continue.';
+                    document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
+                    document.querySelector('#block-overlay p').innerHTML = 'Surrounding noise/sound detected!<br>Please ensure a quiet environment to continue.';
                     fetch('/monitor-exam', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -946,6 +951,9 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                 if (noiseFrames === 0 && noiseDetected) {
                     noiseDetected = false;
                     blockOverlay.style.display = 'none';
+                    // Reset to default message
+                    document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
+                    document.querySelector('#block-overlay p').innerHTML = 'Another person or cheating activity detected.<br>Please ensure only you are visible to continue.';
                 }
             }
             requestAnimationFrame(checkNoise);

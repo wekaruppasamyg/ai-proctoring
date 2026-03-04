@@ -546,6 +546,9 @@ let previousHeadPosition = null;
 let multiFaceFrames = 0;
 const MULTI_FACE_THRESHOLD = 5; // Need 5 consecutive frames to confirm
 
+// Noise detection state (shared with noise detection code below)
+let noiseDetected = false;
+
 // Blink detection state
 let lastBlinkTime = Date.now();
 let eyeClosed = false;
@@ -586,6 +589,8 @@ faceMesh.onResults(results => {
             cheatMessage.innerHTML = `❌ Another person detected! (${numFaces} faces)`;
             cheatMessage.style.display = 'block';
             if (blockOverlay) blockOverlay.style.display = 'flex';
+            const blockMessage = document.getElementById('block-person-message');
+            if (blockMessage) blockMessage.innerHTML = `Quiz Blocked<br>Another Person Detected! (${numFaces} faces)<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>`;
             playWarningSound();
             // Notify backend
             fetch("/monitor-exam", {
@@ -597,7 +602,7 @@ faceMesh.onResults(results => {
         }
     } else {
         multiFaceFrames = Math.max(0, multiFaceFrames - 1); // Gradually decrease
-        if (numFaces === 1) {
+        if (numFaces === 1 && !noiseDetected) {
             cheatMessage.style.display = 'none';
             if (blockOverlay) blockOverlay.style.display = 'none';
         }
@@ -821,12 +826,12 @@ setInterval(() => {
 }, 1000);
 
 // ===== NOISE/SURROUNDING SOUND DETECTION =====
-let noiseDetected = false;
+// noiseDetected is declared above with other detection state variables
 let audioContext = null;
 let analyser = null;
-const NOISE_THRESHOLD = 50; // Adjust sensitivity (higher = less sensitive)
+const NOISE_THRESHOLD = 70; // Adjust sensitivity (higher = less sensitive)
 let noiseFrames = 0;
-const NOISE_FRAME_THRESHOLD = 15; // Consecutive frames to confirm noise
+const NOISE_FRAME_THRESHOLD = 30; // Consecutive frames to confirm noise
 
 navigator.mediaDevices.getUserMedia({ audio: true })
     .then(audioStream => {
@@ -867,6 +872,8 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                 if (noiseFrames === 0 && noiseDetected) {
                     noiseDetected = false;
                     if (blockOverlay) blockOverlay.style.display = 'none';
+                    // Reset message to default
+                    if (blockMessage) blockMessage.innerHTML = 'Quiz Blocked<br>Another person detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>';
                 }
             }
             requestAnimationFrame(checkNoise);
