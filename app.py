@@ -209,6 +209,11 @@ def init_db():
     cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS head_movement_count INTEGER DEFAULT 0")
     cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS eye_tracker_count INTEGER DEFAULT 0")
 
+    # Exam scheduling & password columns
+    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS exam_password TEXT DEFAULT NULL")
+    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ DEFAULT NULL")
+    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ DEFAULT NULL")
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS materials (
         id SERIAL PRIMARY KEY,
