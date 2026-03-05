@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics | AI Exam Proctoring</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--primary:#8b5cf6;--secondary:#6d28d9;--dark:#000;--bg:#000;--card:#1a1a2e;--text:#fff;--muted:#9ca3af;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+body{background:var(--bg);color:var(--text);min-height:100vh;}
+.wrapper{display:flex;min-height:100vh;}
+.sidebar{width:260px;background:linear-gradient(180deg,var(--primary),var(--secondary));padding:20px;position:fixed;height:100%;box-shadow:2px 0 20px rgba(0,0,0,.5);}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:40px;}
+.logo img{width:40px;height:40px;border-radius:50%;}
+.logo span{font-size:20px;font-weight:600;color:#fff;}
+.menu a{display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;text-decoration:none;color:#fff;border-radius:12px;transition:.3s;border:1px solid transparent;}
+.menu a:hover,.menu a.active{background:rgba(0,0,0,.3);transform:translateX(5px);}
+.logout{background:linear-gradient(135deg,#dc2626,#b91c1c)!important;}
+.main{margin-left:260px;flex:1;padding:30px;}
+.topbar{background:linear-gradient(135deg,var(--primary),var(--secondary));padding:18px 30px;border-radius:16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;}
+.topbar h2{color:#fff;font-size:22px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:24px;margin-bottom:30px;}
+.chart-card{background:var(--card);border-radius:16px;padding:24px;border:1px solid rgba(255,255,255,.07);box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.chart-card h3{font-size:15px;font-weight:600;color:var(--muted);margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:30px;}
+.stat{background:var(--card);border-radius:14px;padding:20px;border:1px solid rgba(255,255,255,.07);text-align:center;}
+.stat .val{font-size:28px;font-weight:700;color:var(--primary);}
+.stat .lbl{font-size:12px;color:var(--muted);margin-top:4px;}
+.loading{text-align:center;padding:60px;color:var(--muted);}
+canvas{max-height:280px;}
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <aside class="sidebar">
+    <div class="logo">
+      <img src="/static/home.jpg" alt="Logo">
+      <span>AI Proctor</span>
+    </div>
+    <nav class="menu">
+      <a href="/admin-dashboard"><i class="fas fa-home"></i> Dashboard</a>
+      <a href="/add-subjects"><i class="fas fa-plus-circle"></i> Add Subjects</a>
+      <a href="/add-questions"><i class="fas fa-edit"></i> Add Questions</a>
+      <a href="/bulk-import-questions"><i class="fas fa-file-import"></i> Bulk Import</a>
+      <a href="/manage-materials"><i class="fas fa-file-alt"></i> Manage Materials</a>
+      <a href="/admin-results"><i class="fas fa-chart-bar"></i> View Results</a>
+      <a href="/admin-analytics" class="active"><i class="fas fa-chart-line"></i> Analytics</a>
+      <a href="/admin-coding-results"><i class="fas fa-code"></i> Coding Results</a>
+      <a href="/admin-live-monitor"><i class="fas fa-video"></i> Live Monitoring</a>
+      <a href="/admin-logout" class="logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h2><i class="fas fa-chart-line"></i> Analytics Dashboard</h2>
+      <span>Overview of all exams</span>
+    </div>
+
+    <div class="stat-row" id="stat-row">
+      <div class="stat"><div class="val" id="stat-total">—</div><div class="lbl">Total Exams</div></div>
+      <div class="stat"><div class="val" id="stat-pass" style="color:#22d3ee">—</div><div class="lbl">Total Pass</div></div>
+      <div class="stat"><div class="val" id="stat-fail" style="color:#f87171">—</div><div class="lbl">Total Fail</div></div>
+      <div class="stat"><div class="val" id="stat-violations" style="color:#f59e0b">—</div><div class="lbl">Total Violations</div></div>
+    </div>
+
+    <div class="grid">
+      <div class="chart-card">
+        <h3><i class="fas fa-exclamation-triangle" style="color:#f59e0b"></i> Violation Types</h3>
+        <canvas id="violationsChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3><i class="fas fa-check-circle" style="color:#22d3ee"></i> Pass / Fail per Subject</h3>
+        <canvas id="passfailChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3><i class="fas fa-star" style="color:#a78bfa"></i> Average Score per Subject</h3>
+        <canvas id="avgScoreChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3><i class="fas fa-calendar-alt" style="color:#34d399"></i> Exam Submissions (Last 14 Days)</h3>
+        <canvas id="timelineChart"></canvas>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const COLORS = ['#8b5cf6','#22d3ee','#f59e0b','#34d399','#f87171','#a78bfa','#60a5fa','#fb923c'];
+
+fetch('/api/analytics-data')
+  .then(r => r.json())
+  .then(data => {
+    // Stats
+    const totalPass = data.pass_fail.pass.reduce((a,b)=>a+b,0);
+    const totalFail = data.pass_fail.fail.reduce((a,b)=>a+b,0);
+    const totalViolations = data.violations.data.reduce((a,b)=>a+b,0);
+    document.getElementById('stat-total').textContent = totalPass + totalFail;
+    document.getElementById('stat-pass').textContent = totalPass;
+    document.getElementById('stat-fail').textContent = totalFail;
+    document.getElementById('stat-violations').textContent = totalViolations;
+
+    const defaults = {
+      plugins: { legend: { labels: { color: '#e5e7eb', font: { family: 'Poppins' } } } },
+      scales: {
+        x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,.06)' } },
+        y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,.06)' } }
+      }
+    };
+
+    // Violations donut
+    new Chart(document.getElementById('violationsChart'), {
+      type: 'doughnut',
+      data: {
+        labels: data.violations.labels,
+        datasets: [{ data: data.violations.data, backgroundColor: COLORS, borderWidth: 0 }]
+      },
+      options: { plugins: defaults.plugins, cutout: '60%' }
+    });
+
+    // Pass/Fail bar
+    new Chart(document.getElementById('passfailChart'), {
+      type: 'bar',
+      data: {
+        labels: data.pass_fail.subjects.length ? data.pass_fail.subjects : ['No data'],
+        datasets: [
+          { label: 'Pass', data: data.pass_fail.pass, backgroundColor: '#22d3ee', borderRadius: 6 },
+          { label: 'Fail', data: data.pass_fail.fail, backgroundColor: '#f87171', borderRadius: 6 }
+        ]
+      },
+      options: { ...defaults, responsive: true, plugins: { ...defaults.plugins }, scales: defaults.scales }
+    });
+
+    // Average scores bar
+    new Chart(document.getElementById('avgScoreChart'), {
+      type: 'bar',
+      data: {
+        labels: data.avg_scores.subjects.length ? data.avg_scores.subjects : ['No data'],
+        datasets: [{ label: 'Avg Score', data: data.avg_scores.scores, backgroundColor: '#a78bfa', borderRadius: 6 }]
+      },
+      options: { ...defaults, responsive: true, scales: defaults.scales }
+    });
+
+    // Timeline line chart
+    new Chart(document.getElementById('timelineChart'), {
+      type: 'line',
+      data: {
+        labels: data.timeline.days.length ? data.timeline.days : ['No data'],
+        datasets: [{
+          label: 'Submissions',
+          data: data.timeline.counts,
+          borderColor: '#34d399',
+          backgroundColor: 'rgba(52,211,153,.15)',
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#34d399'
+        }]
+      },
+      options: { ...defaults, responsive: true, scales: defaults.scales }
+    });
+  })
+  .catch(() => { document.querySelector('.main').innerHTML += '<p style="color:#f87171;text-align:center">Failed to load analytics data.</p>'; });
+</script>
+</body>
+</html>

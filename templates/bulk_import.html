@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk Import Questions | AI Proctor</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+:root{--primary:#8b5cf6;--secondary:#6d28d9;--bg:#000;--card:#1a1a2e;--text:#fff;--muted:#9ca3af;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+body{background:var(--bg);color:var(--text);min-height:100vh;}
+.wrapper{display:flex;min-height:100vh;}
+.sidebar{width:260px;background:linear-gradient(180deg,var(--primary),var(--secondary));padding:20px;position:fixed;height:100%;box-shadow:2px 0 20px rgba(0,0,0,.5);}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:40px;}
+.logo img{width:40px;height:40px;border-radius:50%;}
+.logo span{font-size:20px;font-weight:600;color:#fff;}
+.menu a{display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;text-decoration:none;color:#fff;border-radius:12px;transition:.3s;}
+.menu a:hover,.menu a.active{background:rgba(0,0,0,.3);transform:translateX(5px);}
+.logout{background:linear-gradient(135deg,#dc2626,#b91c1c)!important;}
+.main{margin-left:260px;flex:1;padding:30px;}
+.topbar{background:linear-gradient(135deg,var(--primary),var(--secondary));padding:18px 30px;border-radius:16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;}
+.topbar h2{color:#fff;font-size:22px;}
+.card{background:var(--card);border-radius:16px;padding:30px;border:1px solid rgba(255,255,255,.07);max-width:680px;}
+label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px;margin-top:18px;}
+select,input[type=file]{width:100%;background:#0f172a;color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;}
+.btn{display:inline-block;margin-top:22px;padding:12px 28px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;border:none;border-radius:25px;font-size:14px;font-weight:600;cursor:pointer;transition:.3s;}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(139,92,246,.4);}
+.alert-success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#4ade80;border-radius:10px;padding:14px 18px;margin-bottom:20px;}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:10px;padding:14px 18px;margin-bottom:20px;}
+.format-box{background:#0f172a;border-radius:10px;padding:16px;margin-top:24px;font-size:13px;color:var(--muted);}
+.format-box code{color:#a78bfa;font-family:monospace;font-size:12px;display:block;margin-top:8px;white-space:pre;}
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <aside class="sidebar">
+    <div class="logo">
+      <img src="/static/home.jpg" alt="Logo">
+      <span>AI Proctor</span>
+    </div>
+    <nav class="menu">
+      <a href="/admin-dashboard"><i class="fas fa-home"></i> Dashboard</a>
+      <a href="/add-subjects"><i class="fas fa-plus-circle"></i> Add Subjects</a>
+      <a href="/add-questions"><i class="fas fa-edit"></i> Add Questions</a>
+      <a href="/bulk-import-questions" class="active"><i class="fas fa-file-import"></i> Bulk Import</a>
+      <a href="/manage-materials"><i class="fas fa-file-alt"></i> Manage Materials</a>
+      <a href="/admin-results"><i class="fas fa-chart-bar"></i> View Results</a>
+      <a href="/admin-analytics"><i class="fas fa-chart-line"></i> Analytics</a>
+      <a href="/admin-coding-results"><i class="fas fa-code"></i> Coding Results</a>
+      <a href="/admin-live-monitor"><i class="fas fa-video"></i> Live Monitoring</a>
+      <a href="/admin-logout" class="logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h2><i class="fas fa-file-import"></i> Bulk Import Questions</h2>
+      <a href="/admin-dashboard" style="color:#fff;text-decoration:none;font-size:14px;">&larr; Back to Dashboard</a>
+    </div>
+
+    <div class="card">
+      {% if success %}
+      <div class="alert-success"><i class="fas fa-check-circle"></i> {{ success }}</div>
+      {% endif %}
+      {% if error %}
+      <div class="alert-error"><i class="fas fa-exclamation-circle"></i> {{ error }}</div>
+      {% endif %}
+      {% if errors %}
+      <div class="alert-error">
+        <b>Row errors:</b>
+        {% for e in errors %}<div style="margin-top:4px;font-size:12px;">• {{ e }}</div>{% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="POST" enctype="multipart/form-data">
+        <label>Select Subject</label>
+        <select name="subject_id" required>
+          <option value="">-- Choose Subject --</option>
+          {% for s in subjects %}
+          <option value="{{ s[0] }}">{{ s[1] }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Upload CSV or XLSX File</label>
+        <input type="file" name="csv_file" accept=".csv,.xlsx,.xls" required>
+
+        <button type="submit" class="btn"><i class="fas fa-upload"></i> Import Questions</button>
+      </form>
+
+      <div class="format-box">
+        <b>Required file format (CSV example):</b>
+        <code>question,opt1,opt2,opt3,opt4,correct
+What is 2+2?,1,2,3,4,4
+Capital of France?,London,Paris,Berlin,Rome,2</code>
+        <div style="margin-top:10px;font-size:12px;">• <b>correct</b> column = 1, 2, 3, or 4 (which option is correct)</div>
+        <div style="font-size:12px;">• Same column headers required for XLSX files</div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

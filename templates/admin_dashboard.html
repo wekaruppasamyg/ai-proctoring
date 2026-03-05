@@ -340,8 +340,10 @@ button:hover{
         <nav class="menu">
             <a href="/add-subjects"><i class="fas fa-plus-circle"></i> Add Subjects</a>
             <a href="/add-questions"><i class="fas fa-edit"></i> Add Questions</a>
+            <a href="/bulk-import-questions"><i class="fas fa-file-import"></i> Bulk Import</a>
             <a href="/manage-materials"><i class="fas fa-file-alt"></i> Manage Materials</a>
             <a href="/admin-results"><i class="fas fa-chart-bar"></i> View Results</a>
+            <a href="/admin-analytics"><i class="fas fa-chart-line"></i> Analytics</a>
             <a href="/admin-coding-results"><i class="fas fa-code"></i> Coding Results</a>
             <a href="/admin-live-monitor"><i class="fas fa-video"></i> Live Monitoring</a>
             <a href="/admin-logout" class="logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
@@ -373,6 +375,35 @@ button:hover{
                                 </form>
                             </div>
                         </div>
+
+                        <!-- Schedule & Password -->
+                        <details style="margin-bottom:16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;">
+                            <summary style="cursor:pointer;color:#a78bfa;font-size:13px;font-weight:600;list-style:none;">&#9881;&#65039; Schedule &amp; Password &nbsp;<span style="color:#6b7280;font-weight:400;font-size:12px;">(click to expand)</span></summary>
+                            <form method="POST" action="/admin-set-schedule" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+                                <input type="hidden" name="subject_id" value="{{ subject.id }}">
+                                <div>
+                                    <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Start Time</label>
+                                    <input type="datetime-local" name="start_time" value="{{ subject.start_time }}" style="background:#0f172a;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;">
+                                </div>
+                                <div>
+                                    <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">End Time</label>
+                                    <input type="datetime-local" name="end_time" value="{{ subject.end_time }}" style="background:#0f172a;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;">
+                                </div>
+                                <div>
+                                    <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Exam Password (optional)</label>
+                                    <input type="text" name="exam_password" value="{{ subject.exam_password }}" placeholder="Leave blank = no password" style="background:#0f172a;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;width:220px;">
+                                </div>
+                                <button type="submit" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">&#128190; Save</button>
+                                <button type="submit" name="clear" value="1" onclick="this.form.elements['start_time'].value='';this.form.elements['end_time'].value='';this.form.elements['exam_password'].value='';" style="background:#374151;color:#9ca3af;border:none;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;">Clear</button>
+                            </form>
+                            {% if subject.start_time or subject.end_time or subject.exam_password %}
+                            <div style="margin-top:10px;font-size:12px;color:#6b7280;">
+                                {% if subject.start_time %}&#128344; Start: <b style="color:#a78bfa">{{ subject.start_time }}</b>&nbsp;&nbsp;{% endif %}
+                                {% if subject.end_time %}&#128344; End: <b style="color:#a78bfa">{{ subject.end_time }}</b>&nbsp;&nbsp;{% endif %}
+                                {% if subject.exam_password %}&#128274; Password set{% endif %}
+                            </div>
+                            {% endif %}
+                        </details>
                         {% if subject.questions %}
                             {% for q in subject.questions %}
                             <div class="accordion">

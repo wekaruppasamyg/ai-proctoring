@@ -15,9 +15,11 @@ psycopg2-binary==2.9.7
 pandas
 Werkzeug
 scikit-learn
+matplotlib
 requests
 seaborn
 scipy
 sympy
 plotly
 statsmodels
+openpyxl

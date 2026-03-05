@@ -16,6 +16,8 @@ import threading
 from werkzeug.utils import secure_filename
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 import requests as http_requests  # For Brevo API
+import csv
+import io
 
 # ================= APP CONFIG =================
 app = Flask(__name__)
@@ -599,28 +601,65 @@ def start_exam():
     cur = conn.cursor()
 
     # Get subject name
-    cur.execute("SELECT name, enabled FROM subjects WHERE id=%s", (subject_id,))
+    cur.execute("SELECT name, enabled, exam_password, start_time, end_time FROM subjects WHERE id=%s", (subject_id,))
     subject_row = cur.fetchone()
     if not subject_row:
+        conn.close()
         return "Subject not found"
-    subject_name, enabled = subject_row
+    subject_name, enabled, exam_password, start_time, end_time = subject_row
     if not enabled:
+        conn.close()
         return "This subject is currently locked. Please contact admin."
+
+    # Check exam schedule window
+    now_dt = datetime.now()
+    if start_time:
+        from datetime import timezone
+        # Handle both offset-aware and naive datetimes
+        st = start_time.replace(tzinfo=None) if start_time.tzinfo else start_time
+        if now_dt < st:
+            conn.close()
+            return f'<div style="text-align:center;margin-top:80px;background:#0f172a;min-height:100vh;padding-top:80px;"><h2 style="color:#fff;">&#9203; Exam Not Started Yet</h2><p style="color:#9ca3af;margin-top:18px;">This exam starts at <b>{st.strftime("%Y-%m-%d %H:%M")}</b></p><a href="/student-dashboard" style="display:inline-block;margin-top:28px;padding:12px 28px;background:#8b5cf6;color:#fff;border-radius:25px;text-decoration:none;">&larr; Back to Dashboard</a></div>'
+    if end_time:
+        et = end_time.replace(tzinfo=None) if end_time.tzinfo else end_time
+        if now_dt > et:
+            conn.close()
+            return f'<div style="text-align:center;margin-top:80px;background:#0f172a;min-height:100vh;padding-top:80px;"><h2 style="color:#fff;">&#10060; Exam Window Closed</h2><p style="color:#9ca3af;margin-top:18px;">This exam ended at <b>{et.strftime("%Y-%m-%d %H:%M")}</b></p><a href="/student-dashboard" style="display:inline-block;margin-top:28px;padding:12px 28px;background:#8b5cf6;color:#fff;border-radius:25px;text-decoration:none;">&larr; Back to Dashboard</a></div>'
+
+    # Check exam password
+    if exam_password:
+        entered = request.form.get("exam_password", "").strip()
+        if entered != exam_password:
+            conn.close()
+            return '<div style="text-align:center;margin-top:80px;background:#0f172a;min-height:100vh;padding-top:80px;"><h2 style="color:#ff4444;">&#128274; Incorrect Exam Password</h2><p style="color:#9ca3af;margin-top:18px;">Please check with your admin for the correct password.</p><a href="/student-dashboard" style="display:inline-block;margin-top:28px;padding:12px 28px;background:#8b5cf6;color:#fff;border-radius:25px;text-decoration:none;">&larr; Back to Dashboard</a></div>'
 
     # Get questions
     cur.execute(
         """
-        SELECT id, question, opt1, opt2, opt3, opt4
+        SELECT id, question, opt1, opt2, opt3, opt4, correct
         FROM questions
         WHERE subject_id=%s
         """,
         (subject_id,),
     )
-    questions = cur.fetchall()
+    raw_questions = cur.fetchall()
     conn.close()
 
-    if not questions:
+    if not raw_questions:
         return f"<h2>No questions found for {subject_name}</h2>"
+
+    # Randomize: shuffle question order and per-question option order
+    random.shuffle(raw_questions)
+    answer_key = {}
+    questions = []
+    for q in raw_questions:
+        qid, qtext, o1, o2, o3, o4, correct = q
+        opts = [o1, o2, o3, o4]
+        correct_text = opts[correct - 1]
+        random.shuffle(opts)
+        answer_key[str(qid)] = opts.index(correct_text) + 1  # 1-indexed
+        questions.append((qid, qtext, opts[0], opts[1], opts[2], opts[3]))
+    session['answer_key'] = answer_key
 
     # Initialize cheating and event tracking
     session['cheating_count'] = 0
@@ -935,12 +974,19 @@ def submit_exam():
     cur = conn.cursor()
 
     total_questions = 0
+    answer_key = session.get('answer_key', {})
     for qid in request.form:
-        if qid == "subject":
+        if not qid.isdigit():
             continue
 
-        cur.execute("SELECT correct FROM questions WHERE id=%s", (qid,))
-        correct = cur.fetchone()[0]
+        if str(qid) in answer_key:
+            correct = answer_key[str(qid)]
+        else:
+            cur.execute("SELECT correct FROM questions WHERE id=%s", (qid,))
+            row = cur.fetchone()
+            if not row:
+                continue
+            correct = row[0]
 
         if int(request.form[qid]) == correct:
             score += 1
@@ -1034,12 +1080,12 @@ def admin_dashboard():
         return redirect(url_for("admin_login"))
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, name, enabled FROM subjects")
+    cur.execute("SELECT id, name, enabled, exam_password, start_time, end_time FROM subjects")
     subjects = cur.fetchall()
     # For each subject, get its questions and correct answers
     subject_data = []
     for subject in subjects:
-        subject_id, subject_name, enabled = subject
+        subject_id, subject_name, enabled, exam_password, start_time, end_time = subject
         cur.execute(
             "SELECT id, question, opt1, opt2, opt3, opt4, correct FROM questions WHERE subject_id=%s",
             (subject_id,)
@@ -1062,6 +1108,9 @@ def admin_dashboard():
             'id': subject_id,
             'name': subject_name,
             'enabled': enabled,
+            'exam_password': exam_password or '',
+            'start_time': start_time.strftime('%Y-%m-%dT%H:%M') if start_time else '',
+            'end_time': end_time.strftime('%Y-%m-%dT%H:%M') if end_time else '',
             'questions': question_list
         })
     conn.close()
@@ -1614,6 +1663,147 @@ except FileNotFoundError:
 
 print("LOADED DATA PREVIEW")
 print(data)
+
+# ================= EXAM SCHEDULING & PASSWORD =================
+@app.route("/admin-set-schedule", methods=["POST"])
+def admin_set_schedule():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    subject_id = request.form["subject_id"]
+    exam_password = request.form.get("exam_password", "").strip() or None
+    start_time = request.form.get("start_time") or None
+    end_time = request.form.get("end_time") or None
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE subjects SET exam_password=%s, start_time=%s, end_time=%s WHERE id=%s",
+        (exam_password, start_time, end_time, subject_id)
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("admin_dashboard"))
+
+# ================= BULK IMPORT QUESTIONS =================
+@app.route("/bulk-import-questions", methods=["GET", "POST"])
+def bulk_import_questions():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM subjects ORDER BY id")
+    subjects = cur.fetchall()
+    if request.method == "POST":
+        subject_id = request.form.get("subject_id")
+        file = request.files.get("csv_file")
+        if not file or not file.filename:
+            conn.close()
+            return render_template("bulk_import.html", subjects=subjects, error="No file selected.")
+        filename = secure_filename(file.filename)
+        imported = 0
+        errors = []
+        try:
+            if filename.endswith('.csv'):
+                stream = io.StringIO(file.stream.read().decode("UTF-8"))
+                reader = csv.DictReader(stream)
+                for row in reader:
+                    try:
+                        cur.execute(
+                            "INSERT INTO questions(subject_id,question,opt1,opt2,opt3,opt4,correct) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (subject_id, row['question'], row['opt1'], row['opt2'], row['opt3'], row['opt4'], int(row['correct']))
+                        )
+                        imported += 1
+                    except Exception as e:
+                        errors.append(str(e))
+            elif filename.lower().endswith(('.xlsx', '.xls')):
+                import openpyxl
+                wb = openpyxl.load_workbook(file)
+                ws = wb.active
+                headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    row_data = dict(zip(headers, row))
+                    try:
+                        cur.execute(
+                            "INSERT INTO questions(subject_id,question,opt1,opt2,opt3,opt4,correct) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (subject_id, row_data['question'], row_data['opt1'], row_data['opt2'], row_data['opt3'], row_data['opt4'], int(row_data['correct']))
+                        )
+                        imported += 1
+                    except Exception as e:
+                        errors.append(str(e))
+            else:
+                conn.close()
+                return render_template("bulk_import.html", subjects=subjects, error="Only CSV or XLSX files are supported.")
+            conn.commit()
+        except Exception as e:
+            errors.append(f"File parse error: {str(e)}")
+        conn.close()
+        return render_template("bulk_import.html", subjects=subjects,
+                               success=f"Imported {imported} question(s) successfully.",
+                               errors=errors)
+    conn.close()
+    return render_template("bulk_import.html", subjects=subjects)
+
+# ================= ADMIN ANALYTICS =================
+@app.route("/admin-analytics")
+def admin_analytics():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    return render_template("admin_analytics.html")
+
+@app.route("/api/analytics-data")
+def analytics_data():
+    if not session.get("admin"):
+        return jsonify({"error": "unauthorized"}), 401
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # Violation totals
+    cur.execute("""
+        SELECT
+            COALESCE(SUM(looking_away_count),0),
+            COALESCE(SUM(tab_switch_count),0),
+            COALESCE(SUM(camera_hidden_count),0),
+            COALESCE(SUM(hand_cover_count),0),
+            COALESCE(SUM(no_blink_count),0),
+            COALESCE(SUM(cheating_count),0)
+        FROM results
+    """)
+    row = cur.fetchone()
+    violations = {
+        "labels": ["Look Away", "Tab Switch", "Camera Hidden", "Hand Cover", "No Blink", "Multi Person"],
+        "data": [int(v) for v in row]
+    }
+    # Pass/Fail per subject
+    cur.execute("""
+        SELECT subject,
+            COUNT(*) FILTER (WHERE score > 0 AND NOT terminated) as pass_count,
+            COUNT(*) FILTER (WHERE score = 0 OR terminated) as fail_count
+        FROM results GROUP BY subject ORDER BY subject
+    """)
+    pf_rows = cur.fetchall()
+    pass_fail = {
+        "subjects": [r[0] for r in pf_rows],
+        "pass": [int(r[1]) for r in pf_rows],
+        "fail": [int(r[2]) for r in pf_rows]
+    }
+    # Average score per subject
+    cur.execute("""
+        SELECT subject, ROUND(AVG(score)::numeric, 2) FROM results GROUP BY subject ORDER BY subject
+    """)
+    avg_rows = cur.fetchall()
+    avg_scores = {
+        "subjects": [r[0] for r in avg_rows],
+        "scores": [float(r[1]) for r in avg_rows]
+    }
+    # Exam submissions last 14 days
+    cur.execute("""
+        SELECT TO_CHAR(DATE(date),'Mon DD') as day, COUNT(*)
+        FROM results WHERE date >= NOW() - INTERVAL '14 days'
+        GROUP BY DATE(date), day ORDER BY DATE(date)
+    """)
+    tl = cur.fetchall()
+    timeline = {"days": [r[0] for r in tl], "counts": [int(r[1]) for r in tl]}
+    conn.close()
+    return jsonify({"violations": violations, "pass_fail": pass_fail, "avg_scores": avg_scores, "timeline": timeline})
+
 # ================= RUN APP =================
 if __name__ == "__main__":
     init_db()
