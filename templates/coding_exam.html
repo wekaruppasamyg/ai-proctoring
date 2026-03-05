@@ -906,15 +906,24 @@ setInterval(() => {
     }
 }, 1000);
 
-// ===== NOISE/SPEECH DETECTION (Human speech frequency range: 300Hz-3400Hz) =====
+// ===== ADVANCED NOISE/SPEECH DETECTION =====
+// Uses RMS energy calculation, dynamic baseline, and sustained detection for accuracy
 // noiseDetected is declared above with other detection state variables
 let audioContext = null;
 let analyser = null;
-const SPEECH_THRESHOLD = 28; // Lower = more sensitive to human voice
+
+// Tunable parameters
+const RMS_THRESHOLD = 15;           // RMS energy threshold above baseline
+const BASELINE_SAMPLES = 60;        // Frames to calculate baseline (~2 seconds)
+const DETECTION_FRAMES = 20;        // Consecutive frames needed to confirm speech (~0.6s)
+const COOLDOWN_FRAMES = 60;         // Frames of silence before unblocking (~2s)
+const FFT_SIZE = 1024;              // Higher resolution for frequency analysis
+
 let noiseFrames = 0;
-const NOISE_FRAME_THRESHOLD = 10; // Fast detection (~0.3s)
-let noiseCooldownFrames = 0;
-const NOISE_COOLDOWN_THRESHOLD = 50; // Hold block for ~1.5s of silence before unblocking
+let cooldownFrames = 0;
+let baselineBuffer = [];
+let baselineRMS = 0;
+let isCalibrating = true;
 
 navigator.mediaDevices.getUserMedia({ audio: true })
     .then(audioStream => {
@@ -922,49 +931,79 @@ navigator.mediaDevices.getUserMedia({ audio: true })
         analyser = audioContext.createAnalyser();
         const microphone = audioContext.createMediaStreamSource(audioStream);
         microphone.connect(analyser);
-        analyser.fftSize = 512;
+        analyser.fftSize = FFT_SIZE;
+        analyser.smoothingTimeConstant = 0.3; // Smooth rapid fluctuations
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
         function checkNoise() {
             if (!analyser) return;
             analyser.getByteFrequencyData(dataArray);
 
-            // Focus only on human speech frequency band (300Hz – 3400Hz)
+            // Calculate frequency bins for human speech (300Hz - 3400Hz)
             const hzPerBin = audioContext.sampleRate / analyser.fftSize;
             const speechStart = Math.floor(300 / hzPerBin);
-            const speechEnd   = Math.floor(3400 / hzPerBin);
-            let speechSum = 0;
-            for (let i = speechStart; i < speechEnd; i++) speechSum += dataArray[i];
-            const speechAvg = speechSum / (speechEnd - speechStart);
-
-            if (speechAvg > SPEECH_THRESHOLD) {
+            const speechEnd = Math.floor(3400 / hzPerBin);
+            
+            // Calculate RMS (Root Mean Square) for speech frequencies
+            let sumSquares = 0;
+            for (let i = speechStart; i < speechEnd; i++) {
+                sumSquares += dataArray[i] * dataArray[i];
+            }
+            const rms = Math.sqrt(sumSquares / (speechEnd - speechStart));
+            
+            // Calibration phase - establish baseline noise level
+            if (isCalibrating) {
+                baselineBuffer.push(rms);
+                if (baselineBuffer.length >= BASELINE_SAMPLES) {
+                    // Use median for robust baseline (ignores outliers)
+                    const sorted = [...baselineBuffer].sort((a, b) => a - b);
+                    baselineRMS = sorted[Math.floor(sorted.length / 2)];
+                    isCalibrating = false;
+                    console.log('Noise baseline calibrated:', baselineRMS.toFixed(2));
+                }
+                requestAnimationFrame(checkNoise);
+                return;
+            }
+            
+            // Detection: RMS significantly above baseline
+            const isLoudNoise = rms > (baselineRMS + RMS_THRESHOLD);
+            
+            if (isLoudNoise) {
                 noiseFrames++;
-                noiseCooldownFrames = 0;
-                if (noiseFrames >= NOISE_FRAME_THRESHOLD && !noiseDetected) {
+                cooldownFrames = 0;
+                
+                if (noiseFrames >= DETECTION_FRAMES && !noiseDetected) {
                     noiseDetected = true;
                     playWarningSound();
                     blockOverlay.style.display = 'flex';
                     document.querySelector('#block-overlay h2').textContent = '🔊 Exam Blocked';
-                    document.querySelector('#block-overlay p').innerHTML = 'Human Voice / Noise Detected!<br>Please ensure a quiet environment to continue.';
+                    document.querySelector('#block-overlay p').innerHTML = 'Voice/Noise Detected!<br>Please ensure a quiet environment to continue.';
                     fetch('/monitor-exam', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ event: 'noise_detected', level: speechAvg })
+                        body: JSON.stringify({ event: 'noise_detected', level: rms, baseline: baselineRMS })
                     }).catch(()=>{});
                 }
             } else {
-                noiseFrames = Math.max(0, noiseFrames - 1);
+                noiseFrames = Math.max(0, noiseFrames - 2); // Decay faster when quiet
+                
                 if (noiseDetected) {
-                    noiseCooldownFrames++;
-                    if (noiseCooldownFrames >= NOISE_COOLDOWN_THRESHOLD) {
+                    cooldownFrames++;
+                    if (cooldownFrames >= COOLDOWN_FRAMES) {
                         noiseDetected = false;
-                        noiseCooldownFrames = 0;
+                        cooldownFrames = 0;
                         blockOverlay.style.display = 'none';
                         document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
                         document.querySelector('#block-overlay p').innerHTML = 'Another person or cheating activity detected.<br>Please ensure only you are visible to continue.';
                     }
                 }
             }
+            
+            // Gradually update baseline to adapt to environment (very slowly)
+            if (!noiseDetected && !isLoudNoise) {
+                baselineRMS = baselineRMS * 0.999 + rms * 0.001;
+            }
+            
             requestAnimationFrame(checkNoise);
         }
         checkNoise();
