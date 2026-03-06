@@ -1179,25 +1179,36 @@ document.addEventListener("visibilitychange", function () {
 // =========== PHONE DETECTION (COCO-SSD) ===========
 let cocoModel = null;
 let phoneDetectedFrames = 0;
-const PHONE_FRAMES_THRESHOLD = 3;
+const PHONE_FRAMES_THRESHOLD = 2;  // 2 consecutive frames to confirm
 let phoneBlockTimer = null;
 let phoneCooldown = false;
+const phoneCanvas = document.createElement('canvas');
+phoneCanvas.width = 320;
+phoneCanvas.height = 240;
+const phoneCtx = phoneCanvas.getContext('2d');
 
 cocoSsd.load().then(model => {
     cocoModel = model;
     console.log('COCO-SSD loaded for phone detection');
-    detectPhone();
+    setTimeout(detectPhone, 3000); // wait 3s for camera to init
 }).catch(e => console.log('COCO-SSD load error:', e));
 
 function detectPhone() {
-    if (!cocoModel || !video.srcObject) {
+    if (!cocoModel || !video.srcObject || video.readyState < 2) {
         setTimeout(detectPhone, 2000);
         return;
     }
-    cocoModel.detect(video).then(predictions => {
-        const phone = predictions.find(p => p.class === 'cell phone' && p.score > 0.55);
+    try {
+        phoneCtx.drawImage(video, 0, 0, phoneCanvas.width, phoneCanvas.height);
+    } catch(e) {
+        setTimeout(detectPhone, 2000);
+        return;
+    }
+    cocoModel.detect(phoneCanvas).then(predictions => {
+        const phone = predictions.find(p => p.class === 'cell phone' && p.score > 0.40);
         if (phone) {
             phoneDetectedFrames++;
+            console.log('Phone detected, score:', phone.score, 'frames:', phoneDetectedFrames);
             if (phoneDetectedFrames >= PHONE_FRAMES_THRESHOLD && !phoneCooldown) {
                 vPhone++;
                 phoneCooldown = true;
@@ -1208,7 +1219,6 @@ function detectPhone() {
                     body: JSON.stringify({event: 'phone_detected', confidence: phone.score})
                 }).catch(()=>{});
                 phoneDetectedFrames = 0;
-                // Auto-release block after 4 seconds
                 clearTimeout(phoneBlockTimer);
                 phoneBlockTimer = setTimeout(() => {
                     if (!noiseDetected) hideBlockOverlay();
@@ -1219,7 +1229,7 @@ function detectPhone() {
             phoneDetectedFrames = Math.max(0, phoneDetectedFrames - 1);
         }
         setTimeout(detectPhone, 1500);
-    }).catch(() => setTimeout(detectPhone, 2000));
+    }).catch(e => { console.log('Phone detect error:', e); setTimeout(detectPhone, 2000); });
 }
 </script>
 
