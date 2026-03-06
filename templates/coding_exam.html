@@ -354,9 +354,10 @@ header{
                 <span class="file-indicator">main.<span id="ext">py</span></span>
             </div>
             <div class="toolbar-btns">
-                <button class="btn btn-clear" onclick="clearEditor()">🗑 Clear</button>
-                <button class="btn btn-run" id="run-btn" onclick="runCode()">▶ Run</button>
-                <button class="btn btn-submit" onclick="submitCode()">✅ Submit</button>
+                <button class="btn btn-clear" onclick="clearEditor()">&#128465; Clear</button>
+                <button class="btn btn-run" id="run-btn" onclick="runCode()">&#9654; Run</button>
+                <button class="btn btn-submit" onclick="submitCode()">&#9989; Submit</button>
+                <span id="save-indicator" style="font-size:11px;color:var(--muted);margin-left:8px;">&#128190; Saved</span>
             </div>
         </div>
 
@@ -405,6 +406,7 @@ header{
                 <div class="violation-row"><span>Camera Hidden</span><span class="violation-count" id="v-cam">0</span></div>
                 <div class="violation-row"><span>Hand Cover</span><span class="violation-count" id="v-hand">0</span></div>
                 <div class="violation-row"><span>Multi-Person</span><span class="violation-count" id="v-cheat">0</span></div>
+                <div class="violation-row"><span>Phone Detected</span><span class="violation-count" id="v-phone">0</span></div>
             </div>
         </div>
     </div>
@@ -415,6 +417,8 @@ header{
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 
 <!-- CODEMIRROR INIT + APP JS -->
 <script>
@@ -650,33 +654,76 @@ ${data.code}
     });
 }
 
-// =========== SUBMIT ===========
-function submitCode() {
-    if (!confirm("Submit your code? This cannot be undone.")) return;
-    const code = editor.getValue();
-
-    fetch("/submit-coding-exam", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({language: LANGUAGE, code: code, output: lastOutput})
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === "ok") {
-            document.getElementById("success-modal").style.display = "flex";
-        } else {
-            alert("Submission error: " + (data.message || "Unknown error"));
-        }
-    })
-    .catch(() => alert("Network error during submission."));
-}
-
 // =========== CLEAR ===========
 function clearEditor() {
     if (confirm("Clear the editor?")) {
         editor.setValue(cfg.starter);
         editor.clearHistory();
     }
+}
+
+// =========== AUTO-SAVE DRAFT ===========
+const DRAFT_KEY = 'coding_exam_draft_' + USERNAME + '_' + LANGUAGE;
+
+function saveDraft() {
+    const code = editor.getValue();
+    localStorage.setItem(DRAFT_KEY, code);
+    const indicator = document.getElementById('save-indicator');
+    if (indicator) {
+        const now = new Date();
+        const t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+        indicator.textContent = '\u{1F4BE} Saved ' + t;
+        indicator.style.color = 'var(--green)';
+        setTimeout(() => { indicator.style.color = 'var(--muted)'; }, 2000);
+    }
+}
+
+function restoreDraft() {
+    const saved = localStorage.getItem(DRAFT_KEY);
+    if (saved && saved.trim() && saved !== cfg.starter) {
+        if (confirm('A saved draft was found. Restore it?')) {
+            editor.setValue(saved);
+        }
+    }
+}
+
+// Restore draft on page load
+window.addEventListener('load', () => {
+    setTimeout(restoreDraft, 800); // wait for editor to fully init
+});
+
+// Auto-save every 30 seconds
+setInterval(saveDraft, 30000);
+
+// Also save on every keypress (debounced)
+let saveTimeout = null;
+editor.on('change', () => {
+    const indicator = document.getElementById('save-indicator');
+    if (indicator) indicator.textContent = '\u270F\uFE0F Unsaved...';
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveDraft, 3000); // save 3s after last keystroke
+});
+
+// Clear draft on successful submit
+const _origSubmit = submitCode;
+function submitCode() {
+    if (!confirm('Submit your code? This cannot be undone.')) return;
+    const code = editor.getValue();
+    fetch('/submit-coding-exam', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({language: LANGUAGE, code: code, output: lastOutput})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            localStorage.removeItem(DRAFT_KEY); // clear draft on submit
+            document.getElementById('success-modal').style.display = 'flex';
+        } else {
+            alert('Submission error: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(() => alert('Network error during submission.'));
 }
 
 // =========== CAMERA MONITORING WITH MEDIAPIPE ===========
@@ -687,14 +734,15 @@ const cheatAlert = document.getElementById("cheat-alert");
 const cameraHiddenMsg = document.getElementById("camera-hidden-msg");
 
 // Violation counters
-let vLook = 0, vTab = 0, vCam = 0, vHand = 0, vCheat = 0, vNoBlink = 0;
+let vLook = 0, vTab = 0, vCam = 0, vHand = 0, vCheat = 0, vNoBlink = 0, vPhone = 0;
 function updateViolationUI() {
     document.getElementById("v-look").textContent = vLook;
     document.getElementById("v-tab").textContent = vTab;
     document.getElementById("v-cam").textContent = vCam;
     document.getElementById("v-hand").textContent = vHand;
     document.getElementById("v-cheat").textContent = vCheat;
-    ["v-look","v-tab","v-cam","v-hand","v-cheat"].forEach(id => {
+    document.getElementById("v-phone").textContent = vPhone;
+    ["v-look","v-tab","v-cam","v-hand","v-cheat","v-phone"].forEach(id => {
         const el = document.getElementById(id);
         el.classList.toggle("has-violations", parseInt(el.textContent) > 0);
     });
@@ -1085,6 +1133,46 @@ document.addEventListener("keydown", e => {
         alert("⚠ Refreshing is not allowed during the exam!");
     }
 });
+
+// =========== PHONE DETECTION (COCO-SSD) ===========
+let cocoModel = null;
+let phoneDetectedFrames = 0;
+const PHONE_FRAMES_THRESHOLD = 3; // consecutive frames to confirm
+
+cocoSsd.load().then(model => {
+    cocoModel = model;
+    console.log('COCO-SSD loaded for phone detection');
+    detectPhone();
+}).catch(e => console.log('COCO-SSD load error:', e));
+
+function detectPhone() {
+    if (!cocoModel || !video.srcObject) {
+        setTimeout(detectPhone, 2000);
+        return;
+    }
+    cocoModel.detect(video).then(predictions => {
+        const phone = predictions.find(p => p.class === 'cell phone' && p.score > 0.55);
+        if (phone) {
+            phoneDetectedFrames++;
+            if (phoneDetectedFrames >= PHONE_FRAMES_THRESHOLD) {
+                vPhone++;
+                updateViolationUI();
+                cheatAlert.innerHTML = '📱 Phone detected!';
+                cheatAlert.style.display = 'block';
+                fetch('/monitor-exam', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({event: 'phone_detected', confidence: phone.score})
+                }).catch(()=>{});
+                phoneDetectedFrames = 0;
+                setTimeout(() => { cheatAlert.style.display = 'none'; }, 4000);
+            }
+        } else {
+            phoneDetectedFrames = Math.max(0, phoneDetectedFrames - 1);
+        }
+        setTimeout(detectPhone, 1500); // check every 1.5s
+    }).catch(() => setTimeout(detectPhone, 2000));
+}
 </script>
 </body>
 </html>
