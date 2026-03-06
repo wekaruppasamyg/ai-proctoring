@@ -380,6 +380,27 @@ function playWarningSound() {
     }
 }
 
+// Show block overlay and mirror camera feed in corner
+function showBlockOverlay(message) {
+    const blockOverlay = document.getElementById('block-overlay');
+    const blockMessage = document.getElementById('block-person-message');
+    if (blockOverlay) blockOverlay.style.display = 'flex';
+    if (blockMessage) blockMessage.innerHTML = message;
+    // Mirror main video into corner preview
+    const mirror = document.getElementById('block-video-mirror');
+    if (mirror && video.srcObject && !mirror.srcObject) mirror.srcObject = video.srcObject;
+    // Red border on camera
+    video.style.borderColor = '#f87171';
+    video.style.boxShadow = '0 0 20px rgba(248,113,113,0.5)';
+}
+function hideBlockOverlay() {
+    const blockOverlay = document.getElementById('block-overlay');
+    if (blockOverlay) blockOverlay.style.display = 'none';
+    // Restore camera border
+    video.style.borderColor = '';
+    video.style.boxShadow = '';
+}
+
 // Question Navigation & Skip Logic
 let currentQuestion = 1;
 const totalQuestions = parseInt(document.getElementById('total-q').textContent);
@@ -588,9 +609,7 @@ faceMesh.onResults(results => {
             // Multiple faces confirmed - trigger alert and BLOCK SCREEN
             cheatMessage.innerHTML = `❌ Another person detected! (${numFaces} faces)`;
             cheatMessage.style.display = 'block';
-            if (blockOverlay) blockOverlay.style.display = 'flex';
-            const blockMessage = document.getElementById('block-person-message');
-            if (blockMessage) blockMessage.innerHTML = `Quiz Blocked<br>Another Person Detected! (${numFaces} faces)<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>`;
+            showBlockOverlay(`❌ Quiz Blocked<br>Another Person Detected! (${numFaces} faces)<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>`);
             playWarningSound();
             // Notify backend
             fetch("/monitor-exam", {
@@ -598,13 +617,13 @@ faceMesh.onResults(results => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ event: "multiple_persons", face_count: numFaces })
             }).catch(()=>{});
-            multiFaceFrames = 0; // Reset after notification
+            multiFaceFrames = 0;
         }
     } else {
-        multiFaceFrames = Math.max(0, multiFaceFrames - 1); // Gradually decrease
+        multiFaceFrames = Math.max(0, multiFaceFrames - 1);
         if (numFaces === 1 && !noiseDetected) {
             cheatMessage.style.display = 'none';
-            if (blockOverlay) blockOverlay.style.display = 'none';
+            hideBlockOverlay();
         }
     }
     
@@ -897,8 +916,7 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                 if (noiseFrames >= DETECTION_FRAMES && !noiseDetected) {
                     noiseDetected = true;
                     playWarningSound();
-                    if (blockOverlay) blockOverlay.style.display = 'flex';
-                    if (blockMessage) blockMessage.innerHTML = '🔊 Quiz Blocked<br>Voice/Noise Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>';
+                    showBlockOverlay('🔊 Quiz Blocked<br>Voice/Noise Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>');
                     fetch('/monitor-exam', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -917,8 +935,7 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                     if (Date.now() - quietStartTime >= RELEASE_TIME_MS) {
                         noiseDetected = false;
                         quietStartTime = 0;
-                        if (blockOverlay) blockOverlay.style.display = 'none';
-                        if (blockMessage) blockMessage.innerHTML = 'Quiz Blocked<br>Another person detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>';
+                        hideBlockOverlay();
                     }
                 }
             }
@@ -1161,7 +1178,12 @@ document.addEventListener("visibilitychange", function () {
 
 
 <!-- Overlay to block quiz when another person or noise is detected -->
-<div id="block-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.85);z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
+<div id="block-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
+    <!-- Camera stays visible in corner -->
+    <div style="position:fixed;top:80px;left:20px;width:220px;border-radius:14px;overflow:hidden;border:3px solid #f87171;box-shadow:0 0 24px rgba(248,113,113,0.6);z-index:100000;">
+        <video id="block-video-mirror" autoplay muted style="width:100%;display:block;"></video>
+        <div style="background:rgba(0,0,0,0.8);padding:6px;text-align:center;font-size:11px;color:#f87171;font-weight:600;">📷 Camera Active</div>
+    </div>
     <div id="block-person-message" style="color:#fff;font-size:2rem;font-weight:bold;text-align:center;">
         Quiz Blocked<br>Another person detected!<br>
         <span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>

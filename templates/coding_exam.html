@@ -202,12 +202,10 @@ header{
 
 /* BLOCK OVERLAY */
 #block-overlay{
-    display:none;position:fixed;inset:0;
-    background:rgba(0,0,0,0.88);z-index:9999;
+    display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;
+    background:rgba(0,0,0,0.92);z-index:9999;
     align-items:center;justify-content:center;flex-direction:column;gap:12px;
 }
-#block-overlay h2{color:#fff;font-size:2rem;text-align:center;}
-#block-overlay p{color:#9ca3af;font-size:1rem;text-align:center;}
 
 /* SUCCESS MODAL */
 #success-modal{
@@ -308,10 +306,17 @@ header{
 <!-- CHEAT ALERT -->
 <div id="cheat-alert">⚠️ Cheating detected!</div>
 
-<!-- BLOCK OVERLAY -->
-<div id="block-overlay">
-    <h2>⚠️ Exam Blocked</h2>
-    <p>Another person or cheating activity detected.<br>Please ensure only you are visible to continue.</p>
+<!-- BLOCK OVERLAY - camera stays visible in corner -->
+<div id="block-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column;">
+    <!-- Camera corner preview -->
+    <div style="position:fixed;top:80px;left:20px;width:220px;border-radius:14px;overflow:hidden;border:3px solid #f87171;box-shadow:0 0 24px rgba(248,113,113,0.6);z-index:10000;">
+        <video id="block-video-mirror" autoplay muted style="width:100%;display:block;"></video>
+        <div style="background:rgba(0,0,0,0.8);padding:6px;text-align:center;font-size:11px;color:#f87171;font-weight:600;">📷 Camera Active</div>
+    </div>
+    <div id="block-person-message" style="color:#fff;font-size:2rem;font-weight:bold;text-align:center;">
+        Exam Blocked<br>Another person detected!<br>
+        <span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>
+    </div>
 </div>
 
 <!-- SUCCESS MODAL -->
@@ -680,7 +685,6 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const cheatAlert = document.getElementById("cheat-alert");
 const cameraHiddenMsg = document.getElementById("camera-hidden-msg");
-const blockOverlay = document.getElementById("block-overlay");
 
 // Violation counters
 let vLook = 0, vTab = 0, vCam = 0, vHand = 0, vCheat = 0, vNoBlink = 0;
@@ -709,6 +713,24 @@ const BLINK_EAR_THRESHOLD = 0.22;
 
 // Noise detection state (shared with noise detection code below)
 let noiseDetected = false;
+
+// Show block overlay and mirror camera feed in corner
+function showBlockOverlay(message) {
+    const blockOverlay = document.getElementById('block-overlay');
+    const blockMessage = document.getElementById('block-person-message');
+    if (blockOverlay) blockOverlay.style.display = 'flex';
+    if (blockMessage) blockMessage.innerHTML = message;
+    const mirror = document.getElementById('block-video-mirror');
+    if (mirror && video.srcObject && !mirror.srcObject) mirror.srcObject = video.srcObject;
+    video.style.borderColor = '#f87171';
+    video.style.boxShadow = '0 0 20px rgba(248,113,113,0.5)';
+}
+function hideBlockOverlay() {
+    const blockOverlay = document.getElementById('block-overlay');
+    if (blockOverlay) blockOverlay.style.display = 'none';
+    video.style.borderColor = '';
+    video.style.boxShadow = '';
+}
 
 // Helper functions
 function isCameraHidden(canvas) {
@@ -761,9 +783,7 @@ faceMesh.onResults(results => {
             updateViolationUI();
             cheatAlert.innerHTML = `❌ Multiple people detected! (${numFaces} faces)`;
             cheatAlert.style.display = "block";
-            blockOverlay.style.display = "flex";
-            document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
-            document.querySelector('#block-overlay p').innerHTML = `Another person detected! (${numFaces} faces)<br>Please ensure only you are visible to continue.`;
+            showBlockOverlay(`❌ Exam Blocked<br>Another Person Detected! (${numFaces} faces)<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>`);
             fetch("/monitor-exam", {method:"POST", headers:{"Content-Type":"application/json"},
                 body: JSON.stringify({event: "multiple_persons", face_count: numFaces})
             }).then(r => r.json()).then(d => {
@@ -777,7 +797,7 @@ faceMesh.onResults(results => {
         multiFaceFrames = Math.max(0, multiFaceFrames - 1);
         if (numFaces === 1 && !noiseDetected) {
             cheatAlert.style.display = "none";
-            blockOverlay.style.display = "none";
+            hideBlockOverlay();
         }
     }
     
@@ -975,9 +995,7 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                 if (noiseFrames >= DETECTION_FRAMES && !noiseDetected) {
                     noiseDetected = true;
                     playWarningSound();
-                    blockOverlay.style.display = 'flex';
-                    document.querySelector('#block-overlay h2').textContent = '🔊 Exam Blocked';
-                    document.querySelector('#block-overlay p').innerHTML = 'Voice/Noise Detected!<br>Please ensure a quiet environment to continue.';
+                    showBlockOverlay('🔊 Exam Blocked<br>Voice/Noise Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>');
                     fetch('/monitor-exam', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -996,9 +1014,7 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                     if (Date.now() - quietStartTime >= RELEASE_TIME_MS) {
                         noiseDetected = false;
                         quietStartTime = 0;
-                        blockOverlay.style.display = 'none';
-                        document.querySelector('#block-overlay h2').textContent = '⚠️ Exam Blocked';
-                        document.querySelector('#block-overlay p').innerHTML = 'Another person or cheating activity detected.<br>Please ensure only you are visible to continue.';
+                        hideBlockOverlay();
                     }
                 }
             }
