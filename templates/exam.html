@@ -858,7 +858,7 @@ const RELEASE_TIME_MS = 3000;       // 3 seconds of silence to release block
 const FFT_SIZE = 1024;              // Higher resolution for frequency analysis
 
 let noiseFrames = 0;
-let quietStartTime = 0;             // Timestamp when noise stopped
+let lastLoudTime = 0;               // Timestamp of last loud frame
 let baselineBuffer = [];
 let baselineRMS = 0;
 let isCalibrating = true;
@@ -911,11 +911,10 @@ navigator.mediaDevices.getUserMedia({ audio: true })
 
             if (isLoudNoise) {
                 noiseFrames++;
-                quietStartTime = 0; // Reset quiet timer
+                lastLoudTime = Date.now(); // Track last loud frame
                 
                 if (noiseFrames >= DETECTION_FRAMES && !noiseDetected) {
                     noiseDetected = true;
-                    playWarningSound();
                     showBlockOverlay('🔊 Quiz Blocked<br>Voice/Noise Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>');
                     fetch('/monitor-exam', {
                         method: 'POST',
@@ -926,17 +925,11 @@ navigator.mediaDevices.getUserMedia({ audio: true })
             } else {
                 noiseFrames = Math.max(0, noiseFrames - 2); // Decay faster when quiet
                 
-                if (noiseDetected) {
-                    // Start quiet timer if not already started
-                    if (quietStartTime === 0) {
-                        quietStartTime = Date.now();
-                    }
-                    // Check if 3 seconds of quiet passed
-                    if (Date.now() - quietStartTime >= RELEASE_TIME_MS) {
-                        noiseDetected = false;
-                        quietStartTime = 0;
-                        hideBlockOverlay();
-                    }
+                // Release block after RELEASE_TIME_MS since the last loud frame
+                if (noiseDetected && lastLoudTime > 0 && Date.now() - lastLoudTime >= RELEASE_TIME_MS) {
+                    noiseDetected = false;
+                    lastLoudTime = 0;
+                    hideBlockOverlay();
                 }
             }
             
