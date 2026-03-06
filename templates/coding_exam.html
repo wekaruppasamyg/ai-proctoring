@@ -984,11 +984,12 @@ let analyser = null;
 const RMS_THRESHOLD = 15;           // RMS energy threshold above baseline
 const BASELINE_SAMPLES = 60;        // Frames to calculate baseline (~2 seconds)
 const DETECTION_FRAMES = 15;        // Consecutive frames needed to confirm speech (~0.5s)
-const RELEASE_TIME_MS = 3000;       // 3 seconds of silence to release block
+const RELEASE_TIME_MS = 3000;       // Block held for 3 seconds then auto-release
 const FFT_SIZE = 1024;              // Higher resolution for frequency analysis
 
 let noiseFrames = 0;
-let lastLoudTime = 0;               // Timestamp of last loud frame
+let noiseReleaseTimer = null;       // setTimeout handle for auto-release
+let noiseCooldown = false;          // Prevent re-triggering too fast
 let baselineBuffer = [];
 let baselineRMS = 0;
 let isCalibrating = true;
@@ -1038,26 +1039,28 @@ navigator.mediaDevices.getUserMedia({ audio: true })
             
             if (isLoudNoise) {
                 noiseFrames++;
-                lastLoudTime = Date.now(); // Track last loud frame
                 
-                if (noiseFrames >= DETECTION_FRAMES && !noiseDetected) {
+                if (noiseFrames >= DETECTION_FRAMES && !noiseDetected && !noiseCooldown) {
                     noiseDetected = true;
-                    showBlockOverlay('🔊 Exam Blocked<br>Voice/Noise Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>');
+                    noiseCooldown = true;
+                    showBlockOverlay('\uD83D\uDD0A Exam Blocked<br>Voice/Noise Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure a quiet environment to continue.</span>');
                     fetch('/monitor-exam', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ event: 'noise_detected', level: rms, baseline: baselineRMS })
                     }).catch(()=>{});
+                    // Auto-release after exactly 3 seconds
+                    clearTimeout(noiseReleaseTimer);
+                    noiseReleaseTimer = setTimeout(() => {
+                        noiseDetected = false;
+                        hideBlockOverlay();
+                        noiseFrames = 0;
+                        // Cooldown: wait 5s before next trigger
+                        setTimeout(() => { noiseCooldown = false; }, 5000);
+                    }, RELEASE_TIME_MS);
                 }
             } else {
-                noiseFrames = Math.max(0, noiseFrames - 2); // Decay faster when quiet
-                
-                // Release block after RELEASE_TIME_MS since the last loud frame
-                if (noiseDetected && lastLoudTime > 0 && Date.now() - lastLoudTime >= RELEASE_TIME_MS) {
-                    noiseDetected = false;
-                    lastLoudTime = 0;
-                    hideBlockOverlay();
-                }
+                noiseFrames = Math.max(0, noiseFrames - 2);
             }
             
             // Gradually update baseline to adapt to environment (very slowly)
@@ -1138,6 +1141,8 @@ document.addEventListener("keydown", e => {
 let cocoModel = null;
 let phoneDetectedFrames = 0;
 const PHONE_FRAMES_THRESHOLD = 3; // consecutive frames to confirm
+let phoneBlockTimer = null;
+let phoneCooldown = false;
 
 cocoSsd.load().then(model => {
     cocoModel = model;
@@ -1154,18 +1159,23 @@ function detectPhone() {
         const phone = predictions.find(p => p.class === 'cell phone' && p.score > 0.55);
         if (phone) {
             phoneDetectedFrames++;
-            if (phoneDetectedFrames >= PHONE_FRAMES_THRESHOLD) {
+            if (phoneDetectedFrames >= PHONE_FRAMES_THRESHOLD && !phoneCooldown) {
                 vPhone++;
                 updateViolationUI();
-                cheatAlert.innerHTML = '📱 Phone detected!';
-                cheatAlert.style.display = 'block';
+                phoneCooldown = true;
+                showBlockOverlay('\uD83D\uDCF1 Exam Blocked<br>Phone Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please remove the phone from view to continue.</span>');
                 fetch('/monitor-exam', {
                     method: 'POST',
                     headers: {'Content-Type':'application/json'},
                     body: JSON.stringify({event: 'phone_detected', confidence: phone.score})
                 }).catch(()=>{});
                 phoneDetectedFrames = 0;
-                setTimeout(() => { cheatAlert.style.display = 'none'; }, 4000);
+                // Auto-release block after 4 seconds
+                clearTimeout(phoneBlockTimer);
+                phoneBlockTimer = setTimeout(() => {
+                    if (!noiseDetected) hideBlockOverlay();
+                    setTimeout(() => { phoneCooldown = false; }, 3000);
+                }, 4000);
             }
         } else {
             phoneDetectedFrames = Math.max(0, phoneDetectedFrames - 1);
