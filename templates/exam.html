@@ -826,7 +826,7 @@ setInterval(() => {
 }, 1000);
 
 // ===== ADVANCED NOISE/SPEECH DETECTION =====
-// Uses RMS energy calculation, dynamic baseline, and sustained detection for accuracy
+// Uses RMS energy calculation, dynamic baseline, and TIME-BASED release (3 sec)
 // noiseDetected is declared above with other detection state variables
 let audioContext = null;
 let analyser = null;
@@ -834,12 +834,12 @@ let analyser = null;
 // Tunable parameters
 const RMS_THRESHOLD = 15;           // RMS energy threshold above baseline
 const BASELINE_SAMPLES = 60;        // Frames to calculate baseline (~2 seconds)
-const DETECTION_FRAMES = 20;        // Consecutive frames needed to confirm speech (~0.6s)
-const COOLDOWN_FRAMES = 60;         // Frames of silence before unblocking (~2s)
+const DETECTION_FRAMES = 15;        // Consecutive frames needed to confirm speech (~0.5s)
+const RELEASE_TIME_MS = 3000;       // 3 seconds of silence to release block
 const FFT_SIZE = 1024;              // Higher resolution for frequency analysis
 
 let noiseFrames = 0;
-let cooldownFrames = 0;
+let quietStartTime = 0;             // Timestamp when noise stopped
 let baselineBuffer = [];
 let baselineRMS = 0;
 let isCalibrating = true;
@@ -892,7 +892,7 @@ navigator.mediaDevices.getUserMedia({ audio: true })
 
             if (isLoudNoise) {
                 noiseFrames++;
-                cooldownFrames = 0;
+                quietStartTime = 0; // Reset quiet timer
                 
                 if (noiseFrames >= DETECTION_FRAMES && !noiseDetected) {
                     noiseDetected = true;
@@ -909,10 +909,14 @@ navigator.mediaDevices.getUserMedia({ audio: true })
                 noiseFrames = Math.max(0, noiseFrames - 2); // Decay faster when quiet
                 
                 if (noiseDetected) {
-                    cooldownFrames++;
-                    if (cooldownFrames >= COOLDOWN_FRAMES) {
+                    // Start quiet timer if not already started
+                    if (quietStartTime === 0) {
+                        quietStartTime = Date.now();
+                    }
+                    // Check if 3 seconds of quiet passed
+                    if (Date.now() - quietStartTime >= RELEASE_TIME_MS) {
                         noiseDetected = false;
-                        cooldownFrames = 0;
+                        quietStartTime = 0;
                         if (blockOverlay) blockOverlay.style.display = 'none';
                         if (blockMessage) blockMessage.innerHTML = 'Quiz Blocked<br>Another person detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please ensure only you are visible to continue.</span>';
                     }
