@@ -571,6 +571,7 @@ const MULTI_FACE_THRESHOLD = 5; // Need 5 consecutive frames to confirm
 
 // Noise detection state (shared with noise detection code below)
 let noiseDetected = false;
+let phoneDetected = false;  // Phone block flag
 
 // Phone detection violation counter
 let vPhone = 0;
@@ -626,7 +627,7 @@ faceMesh.onResults(results => {
         }
     } else {
         multiFaceFrames = Math.max(0, multiFaceFrames - 1);
-        if (numFaces === 1 && !noiseDetected) {
+        if (numFaces === 1 && !noiseDetected && !phoneDetected) {
             cheatMessage.style.display = 'none';
             hideBlockOverlay();
         }
@@ -1212,6 +1213,7 @@ function detectPhone() {
             if (phoneDetectedFrames >= PHONE_FRAMES_THRESHOLD && !phoneCooldown) {
                 vPhone++;
                 phoneCooldown = true;
+                phoneDetected = true;
                 showBlockOverlay('\uD83D\uDCF1 Quiz Blocked<br>Phone Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please remove the phone from view to continue.</span>');
                 fetch('/monitor-exam', {
                     method: 'POST',
@@ -1221,6 +1223,7 @@ function detectPhone() {
                 phoneDetectedFrames = 0;
                 clearTimeout(phoneBlockTimer);
                 phoneBlockTimer = setTimeout(() => {
+                    phoneDetected = false;
                     if (!noiseDetected) hideBlockOverlay();
                     setTimeout(() => { phoneCooldown = false; }, 3000);
                 }, 4000);

@@ -761,6 +761,7 @@ const BLINK_EAR_THRESHOLD = 0.22;
 
 // Noise detection state (shared with noise detection code below)
 let noiseDetected = false;
+let phoneDetected = false;  // Phone block flag
 
 // Show block overlay and mirror camera feed in corner
 function showBlockOverlay(message) {
@@ -843,7 +844,7 @@ faceMesh.onResults(results => {
         }
     } else {
         multiFaceFrames = Math.max(0, multiFaceFrames - 1);
-        if (numFaces === 1 && !noiseDetected) {
+        if (numFaces === 1 && !noiseDetected && !phoneDetected) {
             cheatAlert.style.display = "none";
             hideBlockOverlay();
         }
@@ -1174,6 +1175,7 @@ function detectPhone() {
                 vPhone++;
                 updateViolationUI();
                 phoneCooldown = true;
+                phoneDetected = true;
                 showBlockOverlay('\uD83D\uDCF1 Exam Blocked<br>Phone Detected!<br><span style="font-size:1.2rem;font-weight:normal;">Please remove the phone from view to continue.</span>');
                 fetch('/monitor-exam', {
                     method: 'POST',
@@ -1183,6 +1185,7 @@ function detectPhone() {
                 phoneDetectedFrames = 0;
                 clearTimeout(phoneBlockTimer);
                 phoneBlockTimer = setTimeout(() => {
+                    phoneDetected = false;
                     if (!noiseDetected) hideBlockOverlay();
                     setTimeout(() => { phoneCooldown = false; }, 3000);
                 }, 4000);
