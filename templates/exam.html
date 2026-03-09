@@ -545,20 +545,17 @@ navigator.mediaDevices.getUserMedia({ video: true })
 // =========== WEBRTC BROADCAST TO ADMIN ===========
 let webrtcPc = null;
 let webrtcAnswerInterval = null;
-let webrtcHeartbeatInterval = null;
 
 async function startWebRTCBroadcast() {
     if (!video.srcObject) return;
     try {
         if (webrtcPc) { webrtcPc.close(); webrtcPc = null; }
         clearInterval(webrtcAnswerInterval);
-        clearInterval(webrtcHeartbeatInterval);
         webrtcPc = new RTCPeerConnection({
             iceServers: [
                 {urls: 'stun:stun.l.google.com:19302'},
                 {urls: 'stun:stun1.l.google.com:19302'},
-                {urls: 'turn:openrelay.metered.ca:80',  username:'openrelayproject', credential:'openrelayproject'},
-                {urls: 'turn:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject'},
+                {urls: 'stun:stun2.l.google.com:19302'},
             ]
         });
         video.srcObject.getVideoTracks().forEach(t => webrtcPc.addTrack(t, video.srcObject));
@@ -586,21 +583,12 @@ async function startWebRTCBroadcast() {
                 }
             } catch(e) {}
         }, 2000);
-        // Reconnect only if the connection actually drops
-        webrtcPc.onconnectionstatechange = () => {
-            if (webrtcPc.connectionState === 'failed' || webrtcPc.connectionState === 'disconnected') {
-                setTimeout(() => startWebRTCBroadcast(), 3000);
-            }
-        };
     } catch(e) { console.log('WebRTC broadcast error:', e); }
 }
-// Heartbeat every 25s — only refreshes timestamp, does NOT reset the answer or reconnect
-function startHeartbeat() {
-    clearInterval(webrtcHeartbeatInterval);
-    webrtcHeartbeatInterval = setInterval(() => fetch('/webrtc/heartbeat', {method:'POST'}).catch(()=>{}), 25000);
-}
-// Start 3 s after page load
-setTimeout(() => { if (video.srcObject) { startWebRTCBroadcast(); startHeartbeat(); } }, 3000);
+// Start 3 s after page load (camera needs time to init)
+setTimeout(() => { if (video.srcObject) startWebRTCBroadcast(); }, 3000);
+// Refresh connection every 3 minutes to handle reconnects / server restarts
+setInterval(() => startWebRTCBroadcast(), 180000);
 // =========== END WEBRTC BROADCAST ===========
 
 const errorMessage = document.getElementById('error-message');
