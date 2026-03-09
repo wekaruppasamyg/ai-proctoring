@@ -232,16 +232,31 @@ async function connectStudent(username, ts) {
 
         pc.ontrack = evt => {
             const vid = document.getElementById('vid-' + username);
-            if (vid && evt.streams[0]) { vid.srcObject = evt.streams[0]; }
+            if (vid) {
+                if (evt.streams && evt.streams[0]) {
+                    vid.srcObject = evt.streams[0];
+                } else if (evt.track) {
+                    if (!vid.srcObject) vid.srcObject = new MediaStream();
+                    vid.srcObject.addTrack(evt.track);
+                }
+                vid.play().catch(() => {});
+            }
             setStatus(username, 'connected', '\u25CF Live');
             updateStats();
         };
 
         pc.onconnectionstatechange = () => {
             const s = pc.connectionState;
-            if (s === 'connected')         setStatus(username, 'connected', '\u25CF Live');
-            else if (s === 'disconnected') setStatus(username, 'failed', 'Disconnected');
-            else if (s === 'failed')       setStatus(username, 'failed', 'Failed');
+            if (s === 'connected') {
+                setStatus(username, 'connected', '\u25CF Live');
+                const vid = document.getElementById('vid-' + username);
+                if (vid && vid.srcObject) vid.play().catch(() => {});
+            } else if (s === 'disconnected' || s === 'failed') {
+                setStatus(username, 'failed', 'Reconnecting\u2026');
+                // Clear cached offer so next poll triggers a fresh handshake
+                delete offerSeen[username];
+                if (pcs[username]) { pcs[username].close(); delete pcs[username]; }
+            }
             updateStats();
         };
 

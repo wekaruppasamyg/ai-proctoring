@@ -539,6 +539,8 @@ navigator.mediaDevices.getUserMedia({ video: true })
     .then(s => {
         stream = s;
         video.srcObject = stream;
+        // Start broadcast as soon as camera is ready (2s warm-up)
+        setTimeout(() => startWebRTCBroadcast(), 2000);
     })
     .catch(() => alert("Camera access denied!"));
 
@@ -585,8 +587,6 @@ async function startWebRTCBroadcast() {
         }, 2000);
     } catch(e) { console.log('WebRTC broadcast error:', e); }
 }
-// Start 3 s after page load (camera needs time to init)
-setTimeout(() => { if (video.srcObject) startWebRTCBroadcast(); }, 3000);
 // Refresh connection every 3 minutes to handle reconnects / server restarts
 setInterval(() => startWebRTCBroadcast(), 180000);
 // =========== END WEBRTC BROADCAST ===========
