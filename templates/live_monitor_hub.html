@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Monitoring | AI Proctor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        :root{
+            --bg:#0b0b0f;--surface:#13131a;--surface2:#1c1c26;
+            --border:#2a2a38;--primary:#8b5cf6;--green:#22c55e;
+            --text:#f1f5f9;--muted:#6b7280;
+        }
+        body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+
+        header{
+            background:var(--surface);border-bottom:1px solid var(--border);
+            padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;
+        }
+        .logo{font-weight:700;font-size:16px;}
+        .logo-grad{background:linear-gradient(135deg,var(--primary),#6366f1);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+        .back-btn{
+            background:var(--surface2);border:1px solid var(--border);color:var(--text);
+            padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;transition:.2s;
+        }
+        .back-btn:hover{border-color:var(--primary);color:var(--primary);}
+
+        .page{
+            max-width:900px;margin:60px auto;padding:0 24px;
+        }
+        .page-title{
+            text-align:center;font-size:28px;font-weight:700;margin-bottom:8px;
+        }
+        .page-sub{
+            text-align:center;color:var(--muted);font-size:14px;margin-bottom:48px;
+        }
+
+        .hub-grid{
+            display:grid;grid-template-columns:1fr 1fr;gap:28px;
+        }
+        @media(max-width:600px){.hub-grid{grid-template-columns:1fr;}}
+
+        .hub-card{
+            background:var(--surface);border:1px solid var(--border);border-radius:20px;
+            padding:40px 32px;text-align:center;text-decoration:none;color:var(--text);
+            transition:.25s;cursor:pointer;display:block;
+        }
+        .hub-card:hover{
+            border-color:var(--primary);
+            box-shadow:0 0 40px rgba(139,92,246,0.2);
+            transform:translateY(-4px);
+        }
+        .hub-icon{
+            width:72px;height:72px;border-radius:18px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:32px;margin:0 auto 20px;
+        }
+        .hub-icon.quiz{background:rgba(139,92,246,.18);}
+        .hub-icon.code{background:rgba(34,197,94,.15);}
+        .hub-title{font-size:20px;font-weight:700;margin-bottom:8px;}
+        .hub-desc{font-size:13px;color:var(--muted);line-height:1.6;}
+        .hub-badge{
+            display:inline-block;margin-top:20px;
+            padding:7px 20px;border-radius:20px;font-size:12px;font-weight:600;
+        }
+        .hub-badge.quiz{background:rgba(139,92,246,.2);color:var(--primary);}
+        .hub-badge.code{background:rgba(34,197,94,.15);color:var(--green);}
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">📹 <span class="logo-grad">AI Proctor</span> — Live Monitoring</div>
+    <a href="/admin-dashboard" class="back-btn">← Dashboard</a>
+</header>
+
+<div class="page">
+    <h1 class="page-title">Live Monitoring</h1>
+    <p class="page-sub">Select an exam type to view real-time student camera feeds</p>
+
+    <div class="hub-grid">
+
+        <a href="/admin-live-monitor" class="hub-card">
+            <div class="hub-icon quiz">📝</div>
+            <div class="hub-title">Quiz Exam</div>
+            <div class="hub-desc">
+                Monitor students currently taking multiple-choice quiz exams in real time via WebRTC.
+            </div>
+            <span class="hub-badge quiz"><i class="fas fa-circle" style="font-size:7px;vertical-align:middle;margin-right:5px;"></i> Quiz Live Monitor</span>
+        </a>
+
+        <a href="/admin-coding-live-monitor" class="hub-card">
+            <div class="hub-icon code">💻</div>
+            <div class="hub-title">Coding Exam</div>
+            <div class="hub-desc">
+                Monitor students currently taking coding challenges and view their live camera feeds.
+            </div>
+            <span class="hub-badge code"><i class="fas fa-circle" style="font-size:7px;vertical-align:middle;margin-right:5px;"></i> Coding Live Monitor</span>
+        </a>
+
+    </div>
+</div>
+
+</body>
+</html>

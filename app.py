@@ -990,6 +990,12 @@ def monitor_exam():
 
 
 # Admin live monitoring route
+@app.route("/admin-live-monitor-hub")
+def admin_live_monitor_hub():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    return render_template("live_monitor_hub.html")
+
 @app.route("/admin-live-monitor")
 def admin_live_monitor():
     if not session.get("admin"):
@@ -1009,6 +1015,12 @@ def admin_live_monitor():
                     "timestamp": ts
                 })
     return render_template("admin_live_monitor.html", candidates=candidates)
+
+@app.route("/admin-coding-live-monitor")
+def admin_coding_live_monitor():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    return render_template("admin_coding_live_monitor.html")
 
 # Endpoint to increment tab switch count from frontend
 @app.route("/tab-switch", methods=["POST"])
@@ -1297,6 +1309,13 @@ def add_questions():
     questions = cur.fetchall()
     conn.close()
     return render_template("add_question.html", subjects=subjects, questions=questions)
+
+# ================= RESULTS HUB =================
+@app.route("/admin-results-hub")
+def admin_results_hub():
+    if not session.get("admin"):
+        return redirect(url_for("admin_login"))
+    return render_template("admin_results_hub.html")
 
  # ================= ADMIN VIEW ALL RESULTS =================
 @app.route("/admin-results")

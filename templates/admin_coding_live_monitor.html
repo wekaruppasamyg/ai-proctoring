@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Live Monitor | AI Proctor Admin</title>
+    <title>Coding Live Monitor | AI Proctor Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *{margin:0;padding:0;box-sizing:border-box;}
         :root{
             --bg:#0b0b0f;--surface:#13131a;--surface2:#1c1c26;
-            --border:#2a2a38;--primary:#8b5cf6;--green:#22c55e;
+            --border:#2a2a38;--primary:#22c55e;--green:#22c55e;
             --red:#ef4444;--yellow:#eab308;--text:#f1f5f9;--muted:#6b7280;
         }
         body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
@@ -18,7 +18,7 @@
             position:sticky;top:0;z-index:100;
         }
         .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;}
-        .logo-grad{background:linear-gradient(135deg,var(--primary),#6366f1);
+        .logo-grad{background:linear-gradient(135deg,#22c55e,#16a34a);
             -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
         .header-right{display:flex;align-items:center;gap:12px;}
         .live-badge{
@@ -50,7 +50,7 @@
         .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;}
         .divider{width:1px;height:36px;background:var(--border);}
         .info-bar{
-            background:rgba(139,92,246,.07);border-bottom:1px solid var(--border);
+            background:rgba(34,197,94,.07);border-bottom:1px solid var(--border);
             padding:10px 28px;font-size:12px;color:var(--muted);
         }
         .grid{
@@ -61,7 +61,7 @@
             background:var(--surface);border:1px solid var(--border);
             border-radius:14px;overflow:hidden;transition:.25s;
         }
-        .student-card:hover{border-color:var(--primary);box-shadow:0 0 20px rgba(139,92,246,.18);}
+        .student-card:hover{border-color:var(--primary);box-shadow:0 0 20px rgba(34,197,94,.18);}
         .student-card video{width:100%;aspect-ratio:4/3;background:#000;object-fit:cover;display:block;}
         .card-footer{padding:12px 14px;display:flex;justify-content:space-between;align-items:center;}
         .card-name{font-weight:600;font-size:14px;}
@@ -87,7 +87,7 @@
             padding:8px 16px;border-radius:8px;font-size:13px;
             cursor:pointer;white-space:nowrap;font-weight:600;transition:.2s;
         }
-        .msg-btn:hover{background:#7c3aed;}
+        .msg-btn:hover{background:#16a34a;}
         .msg-btn:disabled{opacity:.5;cursor:default;}
         .msg-sent{color:var(--green);font-size:12px;padding:0 14px 10px;display:none;}
     </style>
@@ -95,13 +95,9 @@
 <body>
 
 <header>
-    <div class="logo">📹 <span class="logo-grad">AI Proctor</span> &nbsp;— Live Monitor</div>
+    <div class="logo">💻 <span class="logo-grad">AI Proctor</span> &nbsp;— Coding Live Monitor</div>
     <div class="header-right">
         <div class="live-badge"><span class="live-dot"></span> LIVE WebRTC</div>
-        <form action="/delete-all-candidates" method="POST"
-              onsubmit="return confirm('Delete all candidates?');" style="display:inline;">
-            <button class="delete-btn" type="submit">🗑 Clear All</button>
-        </form>
         <a href="/admin-live-monitor-hub" class="back-btn">← Live Monitor Hub</a>
     </div>
 </header>
@@ -124,23 +120,23 @@
 </div>
 
 <div class="info-bar">
-    ℹ️ WebRTC peer-to-peer — video streams directly from student browser to yours.
+    💻 Coding Exam — WebRTC peer-to-peer streams from coding exam students.
     New students appear automatically every 3 seconds. &nbsp;|&nbsp;
     <span id="last-refresh">Checking...</span>
 </div>
 
 <div class="grid" id="student-grid">
     <div class="empty" id="empty-state">
-        <div class="icon">👁️</div>
-        <h3>Waiting for students</h3>
-        <p>Streams appear automatically once students start their exam.</p>
+        <div class="icon">💻</div>
+        <h3>Waiting for coding exam students</h3>
+        <p>Streams appear automatically once students start their coding exam.</p>
     </div>
 </div>
 
 <script>
-const pcs        = {};   // username → RTCPeerConnection
-const offerSeen  = {};   // username → offer timestamp
-const connecting = new Set();  // usernames currently mid-handshake
+const pcs        = {};
+const offerSeen  = {};
+const connecting = new Set();
 
 const ICE = [
     {urls:'stun:stun.l.google.com:19302'},
@@ -192,7 +188,7 @@ async function sendMsg(username) {
         input.value = '';
         sent.style.display = 'block';
         setTimeout(() => { sent.style.display = 'none'; }, 3000);
-    } catch(e) { console.error('Send message error:', e); setStatus(username, 'failed', 'Msg error'); }
+    } catch(e) { console.error('Send message error:', e); }
     btn.disabled = false;
 }
 
@@ -212,9 +208,7 @@ function updateStats() {
 }
 
 async function connectStudent(username, ts) {
-    // Guard 1: already live with same offer
     if (offerSeen[username] === ts && pcs[username]?.connectionState === 'connected') return;
-    // Guard 2: handshake already in progress for this user
     if (connecting.has(username)) return;
 
     connecting.add(username);
@@ -251,7 +245,6 @@ async function connectStudent(username, ts) {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
-        // Wait for ICE gathering (max 6 s)
         await new Promise(resolve => {
             if (pc.iceGatheringState === 'complete') { resolve(); return; }
             pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve(); };
@@ -273,7 +266,7 @@ async function connectStudent(username, ts) {
         delete pcs[username];
         updateStats();
     } finally {
-        connecting.delete(username);  // always release the guard
+        connecting.delete(username);
     }
 }
 
@@ -292,7 +285,7 @@ async function pollStudents() {
                 document.getElementById('card-' + username)?.remove();
                 if (!Object.keys(pcs).length && !document.getElementById('empty-state')) {
                     document.getElementById('student-grid').innerHTML =
-                        '<div class="empty" id="empty-state"><div class="icon">\uD83D\uDC41\uFE0F</div><h3>Waiting for students</h3><p>Streams appear automatically once students start their exam.</p></div>';
+                        '<div class="empty" id="empty-state"><div class="icon">\uD83D\uDCBB</div><h3>Waiting for coding exam students</h3><p>Streams appear automatically once students start their coding exam.</p></div>';
                 }
             }
         }
