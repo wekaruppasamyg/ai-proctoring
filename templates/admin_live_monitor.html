@@ -269,20 +269,6 @@ async function connectStudent(username, ts) {
         setStatus(username, 'connecting', 'Answer sent\u2026');
         updateStats();
 
-        // MJPEG fallback: if WebRTC video stays black after 12s, switch to MJPEG stream
-        setTimeout(() => {
-            const vid = document.getElementById('vid-' + username);
-            if (vid && (!vid.srcObject || vid.videoWidth === 0)) {
-                const img = document.createElement('img');
-                img.src = '/mjpeg/' + username + '?t=' + Date.now();
-                img.style.cssText = 'width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#000;';
-                img.alt = username;
-                vid.replaceWith(img);
-                setStatus(username, 'connected', '\u25CF Live (MJPEG)');
-                updateStats();
-            }
-        }, 12000);
-
     } catch(e) {
         console.error('WebRTC error for', username, e);
         setStatus(username, 'failed', 'Error');

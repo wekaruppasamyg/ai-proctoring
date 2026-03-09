@@ -129,6 +129,16 @@ def webrtc_post_offer():
     webrtc_answers.pop(username, None)   # reset old answer for fresh offer
     return jsonify({'status': 'ok'})
 
+@app.route('/webrtc/heartbeat', methods=['POST'])
+def webrtc_heartbeat():
+    """Update offer timestamp only — does NOT reset the answer."""
+    if 'username' not in session:
+        return '', 401
+    username = session['username']
+    if username in webrtc_offers:
+        webrtc_offers[username]['ts'] = time()
+    return jsonify({'status': 'ok'})
+
 @app.route('/webrtc/get-answer')
 def webrtc_get_answer():
     if 'username' not in session:
@@ -141,7 +151,7 @@ def webrtc_active_students():
     if not session.get('admin'):
         return '', 403
     now = time()
-    stale = [u for u, v in list(webrtc_offers.items()) if now - v['ts'] > 45]
+    stale = [u for u, v in list(webrtc_offers.items()) if now - v['ts'] > 60]
     for u in stale:
         webrtc_offers.pop(u, None)
         webrtc_answers.pop(u, None)
