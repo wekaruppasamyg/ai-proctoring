@@ -954,6 +954,54 @@ navigator.mediaDevices.getUserMedia({video: true, audio: false})
         document.getElementById("cam-status-dot").classList.add("warning");
     });
 
+// =========== WEBRTC BROADCAST TO ADMIN ===========
+let webrtcPc = null;
+let webrtcAnswerInterval = null;
+
+async function startWebRTCBroadcast() {
+    if (!video.srcObject) return;
+    try {
+        if (webrtcPc) { webrtcPc.close(); webrtcPc = null; }
+        clearInterval(webrtcAnswerInterval);
+        webrtcPc = new RTCPeerConnection({
+            iceServers: [
+                {urls: 'stun:stun.l.google.com:19302'},
+                {urls: 'stun:stun1.l.google.com:19302'}
+            ]
+        });
+        video.srcObject.getVideoTracks().forEach(t => webrtcPc.addTrack(t, video.srcObject));
+        const offer = await webrtcPc.createOffer({offerToReceiveVideo: false, offerToReceiveAudio: false});
+        await webrtcPc.setLocalDescription(offer);
+        // Wait for ICE gathering to complete (max 5 s)
+        await new Promise(resolve => {
+            if (webrtcPc.iceGatheringState === 'complete') { resolve(); return; }
+            webrtcPc.onicegatheringstatechange = () => { if (webrtcPc.iceGatheringState === 'complete') resolve(); };
+            setTimeout(resolve, 5000);
+        });
+        await fetch('/webrtc/offer', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sdp: webrtcPc.localDescription})
+        });
+        // Poll for admin answer
+        webrtcAnswerInterval = setInterval(async () => {
+            if (webrtcPc && webrtcPc.remoteDescription) { clearInterval(webrtcAnswerInterval); return; }
+            try {
+                const d = await fetch('/webrtc/get-answer').then(r => r.json());
+                if (d.sdp) {
+                    await webrtcPc.setRemoteDescription(new RTCSessionDescription(d.sdp));
+                    clearInterval(webrtcAnswerInterval);
+                }
+            } catch(e) {}
+        }, 2000);
+    } catch(e) { console.log('WebRTC broadcast error:', e); }
+}
+// Start 3 s after page load (camera needs time to init)
+setTimeout(() => { if (video.srcObject) startWebRTCBroadcast(); }, 3000);
+// Refresh connection every 3 minutes to handle reconnects
+setInterval(() => startWebRTCBroadcast(), 180000);
+// =========== END WEBRTC BROADCAST ===========
+
 const camera = new Camera(video, {
     onFrame: async () => {
         await faceMesh.send({image: video});

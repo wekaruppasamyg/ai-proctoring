@@ -115,6 +115,53 @@ def upload_frame():
 def mjpeg_stream(username):
     return Response(gen_mjpeg(username), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+# ================= WEBRTC SIGNALING =================
+webrtc_offers  = {}   # {username: {'sdp': ..., 'ts': float}}
+webrtc_answers = {}   # {username: {'sdp': ..., 'ts': float}}
+
+@app.route('/webrtc/offer', methods=['POST'])
+def webrtc_post_offer():
+    if 'username' not in session:
+        return '', 401
+    username = session['username']
+    data = request.get_json()
+    webrtc_offers[username]  = {'sdp': data.get('sdp'), 'ts': time()}
+    webrtc_answers.pop(username, None)   # reset old answer for fresh offer
+    return jsonify({'status': 'ok'})
+
+@app.route('/webrtc/get-answer')
+def webrtc_get_answer():
+    if 'username' not in session:
+        return '', 401
+    ans = webrtc_answers.get(session['username'])
+    return jsonify({'sdp': ans['sdp'] if ans else None})
+
+@app.route('/webrtc/active-students')
+def webrtc_active_students():
+    if not session.get('admin'):
+        return '', 403
+    now = time()
+    stale = [u for u, v in list(webrtc_offers.items()) if now - v['ts'] > 300]
+    for u in stale:
+        webrtc_offers.pop(u, None)
+        webrtc_answers.pop(u, None)
+    return jsonify({'students': [{'username': u, 'ts': v['ts']} for u, v in webrtc_offers.items()]})
+
+@app.route('/webrtc/offer/<username>')
+def webrtc_get_offer(username):
+    if not session.get('admin'):
+        return '', 403
+    offer = webrtc_offers.get(username)
+    return jsonify({'sdp': offer['sdp'] if offer else None})
+
+@app.route('/webrtc/answer/<username>', methods=['POST'])
+def webrtc_post_answer(username):
+    if not session.get('admin'):
+        return '', 403
+    data = request.get_json()
+    webrtc_answers[username] = {'sdp': data.get('sdp'), 'ts': time()}
+    return jsonify({'status': 'ok'})
+
 # ================= DATABASE INIT =================
 
 _db_initialized = False

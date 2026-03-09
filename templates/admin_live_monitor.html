@@ -2,43 +2,257 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Live Candidate Monitoring | AI Proctor</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <title>Live Monitor | AI Proctor Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background: #18181b; color: #fff; font-family: 'Poppins', sans-serif; }
-        .container { max-width: 1200px; margin: 40px auto; background: #23232a; border-radius: 16px; box-shadow: 0 8px 32px #000; padding: 32px; }
-        h2 { color: #22d3ee; text-align: center; margin-bottom: 24px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
-        .candidate-card { background: #18181b; border-radius: 12px; padding: 18px; box-shadow: 0 4px 16px #000; text-align: center; }
-        .candidate-card img { width: 220px; height: 160px; object-fit: cover; border-radius: 8px; background: #222; }
-        .candidate-card .username { font-weight: 600; color: #22d3ee; margin-top: 10px; }
-        .candidate-card .status { font-size: 13px; color: red; margin-top: 4px; }
+        *{margin:0;padding:0;box-sizing:border-box;}
+        :root{
+            --bg:#0b0b0f;--surface:#13131a;--surface2:#1c1c26;
+            --border:#2a2a38;--primary:#8b5cf6;--green:#22c55e;
+            --red:#ef4444;--yellow:#eab308;--text:#f1f5f9;--muted:#6b7280;
+        }
+        body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+        header{
+            background:var(--surface);border-bottom:1px solid var(--border);
+            padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;
+            position:sticky;top:0;z-index:100;
+        }
+        .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;}
+        .logo-grad{background:linear-gradient(135deg,var(--primary),#6366f1);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+        .header-right{display:flex;align-items:center;gap:12px;}
+        .live-badge{
+            display:flex;align-items:center;gap:6px;
+            background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.3);
+            color:var(--green);padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;
+        }
+        .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite;}
+        @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.85);}}
+        .back-btn{
+            background:var(--surface2);border:1px solid var(--border);color:var(--text);
+            padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;transition:.2s;
+        }
+        .back-btn:hover{border-color:var(--primary);color:var(--primary);}
+        .delete-btn{
+            background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);
+            color:var(--red);padding:8px 16px;border-radius:8px;
+            font-size:13px;cursor:pointer;transition:.2s;
+        }
+        .delete-btn:hover{background:var(--red);color:#fff;}
+        .stats-bar{
+            background:var(--surface);border-bottom:1px solid var(--border);
+            padding:14px 28px;display:flex;gap:36px;align-items:center;
+        }
+        .stat{display:flex;flex-direction:column;gap:2px;}
+        .stat-val{font-size:22px;font-weight:700;color:var(--primary);}
+        .stat-val.green{color:var(--green);}
+        .stat-val.yellow{color:var(--yellow);}
+        .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;}
+        .divider{width:1px;height:36px;background:var(--border);}
+        .info-bar{
+            background:rgba(139,92,246,.07);border-bottom:1px solid var(--border);
+            padding:10px 28px;font-size:12px;color:var(--muted);
+        }
+        .grid{
+            display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+            gap:20px;padding:24px 28px;
+        }
+        .student-card{
+            background:var(--surface);border:1px solid var(--border);
+            border-radius:14px;overflow:hidden;transition:.25s;
+        }
+        .student-card:hover{border-color:var(--primary);box-shadow:0 0 20px rgba(139,92,246,.18);}
+        .student-card video{width:100%;aspect-ratio:4/3;background:#000;object-fit:cover;display:block;}
+        .card-footer{padding:12px 14px;display:flex;justify-content:space-between;align-items:center;}
+        .card-name{font-weight:600;font-size:14px;}
+        .card-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+        .sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+        .sdot.connecting{background:var(--yellow);animation:pulse 1s infinite;}
+        .sdot.connected{background:var(--green);}
+        .sdot.failed{background:var(--red);}
+        .sdot.waiting{background:var(--muted);}
+        .empty{grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--muted);}
+        .empty .icon{font-size:48px;margin-bottom:16px;opacity:.4;}
+        .empty h3{font-size:18px;margin-bottom:8px;color:var(--text);}
     </style>
-    <script>
-    // Auto-refresh every 5 seconds
-    setInterval(() => { location.reload(); }, 5000);
-    </script>
 </head>
 <body>
-<div class="container">
-    <h2>Live Candidate Monitoring</h2>
-    <div style="text-align: center; margin-bottom: 24px;">
-        <form action="/delete-all-candidates" method="POST" onsubmit="return confirm('Are you sure you want to delete all candidates? This action cannot be undone.');">
-            <button type="submit" style="background: #dc2626; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer;">Delete All Candidates</button>
+
+<header>
+    <div class="logo">📹 <span class="logo-grad">AI Proctor</span> &nbsp;— Live Monitor</div>
+    <div class="header-right">
+        <div class="live-badge"><span class="live-dot"></span> LIVE WebRTC</div>
+        <form action="/delete-all-candidates" method="POST"
+              onsubmit="return confirm('Delete all candidates?');" style="display:inline;">
+            <button class="delete-btn" type="submit">🗑 Clear All</button>
         </form>
+        <a href="/admin-dashboard" class="back-btn">← Dashboard</a>
     </div>
-    <div class="grid">
-        {% for c in candidates %}
-        <div class="candidate-card">
-            <img src="/mjpeg/{{ c.username }}" alt="{{ c.username }} live" style="width:220px;height:160px;object-fit:cover;border-radius:8px;background:#222;">
-            <div class="username">{{ c.username }}</div>
-            <div class="status">Live</div>
-        </div>
-        {% endfor %}
-        {% if not candidates %}
-            <p style="color:#aaa;text-align:center;width:100%;">No live candidates found.</p>
-        {% endif %}
+</header>
+
+<div class="stats-bar">
+    <div class="stat">
+        <div class="stat-val" id="stat-total">0</div>
+        <div class="stat-label">Students Online</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat">
+        <div class="stat-val green" id="stat-connected">0</div>
+        <div class="stat-label">Streams Live</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat">
+        <div class="stat-val yellow" id="stat-connecting">0</div>
+        <div class="stat-label">Connecting</div>
     </div>
 </div>
+
+<div class="info-bar">
+    ℹ️ WebRTC peer-to-peer — video streams directly from student browser to yours.
+    New students appear automatically every 3 seconds. &nbsp;|&nbsp;
+    <span id="last-refresh">Checking...</span>
+</div>
+
+<div class="grid" id="student-grid">
+    <div class="empty" id="empty-state">
+        <div class="icon">👁️</div>
+        <h3>Waiting for students</h3>
+        <p>Streams appear automatically once students start their exam.</p>
+    </div>
+</div>
+
+<script>
+const pcs       = {};   // username → RTCPeerConnection
+const offerSeen = {};   // username → offer timestamp
+
+const ICE = [
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun1.l.google.com:19302'},
+    {urls:'stun:stun2.l.google.com:19302'},
+];
+
+function getOrCreateCard(username) {
+    let card = document.getElementById('card-' + username);
+    if (card) return card;
+    document.getElementById('empty-state')?.remove();
+    card = document.createElement('div');
+    card.className = 'student-card';
+    card.id = 'card-' + username;
+    card.innerHTML =
+        '<video id="vid-' + username + '" autoplay muted playsinline></video>' +
+        '<div class="card-footer">' +
+            '<div class="card-name">\uD83D\uDC64 ' + username + '</div>' +
+            '<div class="card-status">' +
+                '<span class="sdot connecting" id="dot-' + username + '"></span>' +
+                '<span id="stxt-' + username + '">Connecting\u2026</span>' +
+            '</div>' +
+        '</div>';
+    document.getElementById('student-grid').appendChild(card);
+    return card;
+}
+
+function setStatus(u, state, text) {
+    const d = document.getElementById('dot-' + u);
+    const t = document.getElementById('stxt-' + u);
+    if (d) d.className = 'sdot ' + state;
+    if (t) t.textContent = text;
+}
+
+function updateStats() {
+    const total     = Object.keys(pcs).length;
+    const connected = Object.values(pcs).filter(p => p.connectionState === 'connected').length;
+    document.getElementById('stat-total').textContent      = total;
+    document.getElementById('stat-connected').textContent  = connected;
+    document.getElementById('stat-connecting').textContent = total - connected;
+}
+
+async function connectStudent(username, ts) {
+    if (offerSeen[username] === ts && pcs[username]?.connectionState === 'connected') return;
+
+    if (pcs[username]) { pcs[username].close(); delete pcs[username]; }
+    offerSeen[username] = ts;
+    getOrCreateCard(username);
+    setStatus(username, 'connecting', 'Fetching offer\u2026');
+
+    try {
+        const offerData = await fetch('/webrtc/offer/' + username).then(r => r.json());
+        if (!offerData.sdp) { setStatus(username, 'waiting', 'No offer yet'); return; }
+
+        const pc = new RTCPeerConnection({iceServers: ICE});
+        pcs[username] = pc;
+
+        pc.ontrack = evt => {
+            const vid = document.getElementById('vid-' + username);
+            if (vid && evt.streams[0]) { vid.srcObject = evt.streams[0]; }
+            setStatus(username, 'connected', '\u25CF Live');
+            updateStats();
+        };
+
+        pc.onconnectionstatechange = () => {
+            const s = pc.connectionState;
+            if (s === 'connected')   setStatus(username, 'connected', '\u25CF Live');
+            else if (s === 'disconnected') setStatus(username, 'failed', 'Disconnected');
+            else if (s === 'failed') setStatus(username, 'failed', 'Failed');
+            updateStats();
+        };
+
+        await pc.setRemoteDescription(new RTCSessionDescription(offerData.sdp));
+        setStatus(username, 'connecting', 'Creating answer\u2026');
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        // Wait for ICE gathering (max 6 s)
+        await new Promise(resolve => {
+            if (pc.iceGatheringState === 'complete') { resolve(); return; }
+            pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve(); };
+            setTimeout(resolve, 6000);
+        });
+
+        await fetch('/webrtc/answer/' + username, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sdp: pc.localDescription})
+        });
+
+        setStatus(username, 'connecting', 'Answer sent\u2026');
+        updateStats();
+
+    } catch(e) {
+        console.error('WebRTC error for', username, e);
+        setStatus(username, 'failed', 'Error');
+        delete pcs[username];
+        updateStats();
+    }
+}
+
+async function pollStudents() {
+    try {
+        const data = await fetch('/webrtc/active-students').then(r => r.json());
+        const activeSet = new Set(data.students.map(s => s.username));
+
+        for (const s of data.students) connectStudent(s.username, s.ts);
+
+        for (const username of Object.keys(pcs)) {
+            if (!activeSet.has(username)) {
+                pcs[username].close();
+                delete pcs[username];
+                delete offerSeen[username];
+                document.getElementById('card-' + username)?.remove();
+                if (!Object.keys(pcs).length && !document.getElementById('empty-state')) {
+                    document.getElementById('student-grid').innerHTML =
+                        '<div class="empty" id="empty-state"><div class="icon">\uD83D\uDC41\uFE0F</div><h3>Waiting for students</h3><p>Streams appear automatically once students start their exam.</p></div>';
+                }
+            }
+        }
+
+        document.getElementById('last-refresh').textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+        updateStats();
+    } catch(e) { console.error('Poll error:', e); }
+}
+
+setInterval(pollStudents, 3000);
+pollStudents();
+</script>
 </body>
 </html>
