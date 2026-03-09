@@ -141,7 +141,7 @@ def webrtc_active_students():
     if not session.get('admin'):
         return '', 403
     now = time()
-    stale = [u for u, v in list(webrtc_offers.items()) if now - v['ts'] > 300]
+    stale = [u for u, v in list(webrtc_offers.items()) if now - v['ts'] > 45]
     for u in stale:
         webrtc_offers.pop(u, None)
         webrtc_answers.pop(u, None)

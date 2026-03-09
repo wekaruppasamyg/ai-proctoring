@@ -586,8 +586,8 @@ async function startWebRTCBroadcast() {
 }
 // Start 3 s after page load (camera needs time to init)
 setTimeout(() => { if (video.srcObject) startWebRTCBroadcast(); }, 3000);
-// Refresh connection every 3 minutes to handle reconnects
-setInterval(() => startWebRTCBroadcast(), 180000);
+// Refresh connection every 30 seconds to keep offer fresh
+setInterval(() => startWebRTCBroadcast(), 30000);
 // =========== END WEBRTC BROADCAST ===========
 
 const errorMessage = document.getElementById('error-message');
