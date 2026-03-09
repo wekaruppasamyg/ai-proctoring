@@ -162,6 +162,27 @@ def webrtc_post_answer(username):
     webrtc_answers[username] = {'sdp': data.get('sdp'), 'ts': time()}
     return jsonify({'status': 'ok'})
 
+# ================= ADMIN MESSAGING =================
+admin_messages = {}   # {username: [{'text': str, 'ts': float}]}
+
+@app.route('/admin/message/<username>', methods=['POST'])
+def admin_send_message(username):
+    if not session.get('admin'):
+        return '', 403
+    data = request.get_json()
+    text = (data.get('text') or '').strip()
+    if not text:
+        return jsonify({'status': 'empty'}), 400
+    admin_messages.setdefault(username, []).append({'text': text, 'ts': time()})
+    return jsonify({'status': 'ok'})
+
+@app.route('/student/poll-message')
+def student_poll_message():
+    if 'username' not in session:
+        return '', 401
+    msgs = admin_messages.pop(session['username'], [])
+    return jsonify({'messages': msgs})
+
 # ================= DATABASE INIT =================
 
 _db_initialized = False
@@ -1045,21 +1066,23 @@ def submit_exam():
         total_questions += 1
 
     # ===== MALPRACTICE PENALTY SYSTEM =====
-    # Calculate total malpractice violations (excluding head movement, eye tracker - warning only)
+    # Count total violations (head movement & eye tracker are warnings only, not penalised)
     total_malpractice = (
-        cheating_count + 
-        looking_away_count + 
-        tab_switch_count + 
-        camera_hidden_count + 
+        cheating_count +
+        looking_away_count +
+        tab_switch_count +
+        camera_hidden_count +
         hand_cover_count +
         no_blink_count
     )
-    
-    # Deduct 1 mark for each malpractice violation
+
     original_score = score
-    penalty_applied = total_malpractice
-    if total_malpractice > 0 and not terminated:
-        score = max(0, score - total_malpractice)  # Ensure score doesn't go below 0
+    # Flat -3 marks penalty ONLY when violations exceed 5; otherwise full marks kept
+    if total_malpractice > 5 and not terminated:
+        penalty_applied = 3
+        score = max(0, score - 3)
+    else:
+        penalty_applied = 0
     # ===== END MALPRACTICE PENALTY =====
 
     cur.execute(

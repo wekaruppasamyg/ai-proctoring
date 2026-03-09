@@ -74,6 +74,22 @@
         .empty{grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--muted);}
         .empty .icon{font-size:48px;margin-bottom:16px;opacity:.4;}
         .empty h3{font-size:18px;margin-bottom:8px;color:var(--text);}
+        .msg-row{display:flex;gap:8px;padding:0 14px 14px;}
+        .msg-input{
+            flex:1;background:var(--surface2);border:1px solid var(--border);
+            color:var(--text);padding:8px 12px;border-radius:8px;font-size:13px;
+            outline:none;transition:.2s;
+        }
+        .msg-input:focus{border-color:var(--primary);}
+        .msg-input::placeholder{color:var(--muted);}
+        .msg-btn{
+            background:var(--primary);color:#fff;border:none;
+            padding:8px 16px;border-radius:8px;font-size:13px;
+            cursor:pointer;white-space:nowrap;font-weight:600;transition:.2s;
+        }
+        .msg-btn:hover{background:#7c3aed;}
+        .msg-btn:disabled{opacity:.5;cursor:default;}
+        .msg-sent{color:var(--green);font-size:12px;padding:0 14px 10px;display:none;}
     </style>
 </head>
 <body>
@@ -146,9 +162,37 @@ function getOrCreateCard(username) {
                 '<span class="sdot connecting" id="dot-' + username + '"></span>' +
                 '<span id="stxt-' + username + '">Connecting\u2026</span>' +
             '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="msg-row">' +
+            '<input class="msg-input" id="msginput-' + username + '" type="text" maxlength="200" placeholder="Send a warning to ' + username + '\u2026" ' +
+                'onkeydown="if(event.key===\'Enter\')sendMsg(\''+username+'\')">' +
+            '<button class="msg-btn" id="msgbtn-' + username + '" onclick="sendMsg(\''+username+'\')">' +
+                '\uD83D\uDCE8 Send' +
+            '</button>' +
+        '</div>' +
+        '<div class="msg-sent" id="msgsent-' + username + '">\u2714 Message delivered!</div>';
     document.getElementById('student-grid').appendChild(card);
     return card;
+}
+
+async function sendMsg(username) {
+    const input = document.getElementById('msginput-' + username);
+    const btn   = document.getElementById('msgbtn-'   + username);
+    const sent  = document.getElementById('msgsent-'  + username);
+    const text  = (input?.value || '').trim();
+    if (!text) { input?.focus(); return; }
+    btn.disabled = true;
+    try {
+        await fetch('/admin/message/' + username, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text})
+        });
+        input.value = '';
+        sent.style.display = 'block';
+        setTimeout(() => { sent.style.display = 'none'; }, 3000);
+    } catch(e) { alert('Failed to send message'); }
+    btn.disabled = false;
 }
 
 function setStatus(u, state, text) {

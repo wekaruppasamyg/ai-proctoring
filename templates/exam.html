@@ -1298,5 +1298,27 @@ function detectPhone() {
     </div>
 </div>
 
+<!-- Admin message popup -->
+<div id="admin-msg-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.75);z-index:999999;align-items:center;justify-content:center;">
+    <div style="background:#1e1e2e;border:2px solid #8b5cf6;border-radius:18px;padding:40px 36px;max-width:480px;width:90%;text-align:center;box-shadow:0 0 40px rgba(139,92,246,0.4);">
+        <div style="font-size:2.4rem;margin-bottom:14px;">📢</div>
+        <h2 style="color:#f1f5f9;margin-bottom:14px;font-size:1.25rem;">Message from Invigilator</h2>
+        <p id="admin-msg-text" style="color:#e2e8f0;font-size:1.05rem;line-height:1.6;margin-bottom:28px;"></p>
+        <button onclick="document.getElementById('admin-msg-overlay').style.display='none'" style="background:#8b5cf6;color:#fff;border:none;padding:12px 36px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;">OK, I understand</button>
+    </div>
+</div>
+<script>
+// =========== ADMIN MESSAGE POLLING ===========
+setInterval(async () => {
+    try {
+        const d = await fetch('/student/poll-message').then(r => r.json());
+        if (d.messages && d.messages.length > 0) {
+            document.getElementById('admin-msg-text').textContent = d.messages[d.messages.length - 1].text;
+            document.getElementById('admin-msg-overlay').style.display = 'flex';
+        }
+    } catch(e) {}
+}, 5000);
+</script>
+
 </body>
 </html>

@@ -590,10 +590,12 @@ header {
                 {% endif %}
             </div>
             {% if penalty_applied > 0 %}
-            <div class="original-score">Original: {{ original_score }}/{{ total_questions }}</div>
+            <div class="original-score">Original Score: {{ original_score }}/{{ total_questions }}</div>
             <div class="penalty-badge">
-                ⚠️ -{{ penalty_applied }} marks penalty ({{ total_malpractice }} violations detected)
+                ⚠️ -3 marks penalty applied ({{ total_malpractice }} violations detected — threshold: 5)
             </div>
+            {% elif total_malpractice > 0 %}
+            <div class="original-score" style="color:var(--green);font-size:0.85rem;margin-top:8px;">✅ {{ total_malpractice }} violation(s) detected — under threshold, no penalty</div>
             {% endif %}
         </div>
 

@@ -243,6 +243,11 @@ tr:hover td{
     box-shadow:0 8px 20px rgba(255,0,0,0.5);
 }
 
+/* ===== PENALTY BADGE ===== */
+.penalty-high  { color:#ef4444; font-weight:600; }
+.penalty-none  { color:#22c55e; font-weight:600; }
+.penalty-term  { color:#f59e0b; font-weight:600; }
+
 /* ===== EMPTY ===== */
 .empty{
     text-align:center;
@@ -309,10 +314,12 @@ tr:hover td{
                     <tr>
                         <th><i class="fas fa-user"></i> Student</th>
                         <th><i class="fas fa-star"></i> Score</th>
+                        <th><i class="fas fa-minus-circle"></i> Penalty</th>
                         <th><i class="fas fa-calendar"></i> Date</th>
                         <th><i class="fas fa-eye-slash"></i> Cheating</th>
                         <th><i class="fas fa-eye"></i> Look Away</th>
                         <th><i class="fas fa-exchange-alt"></i> Tab Switch</th>
+                        <th><i class="fas fa-camera"></i> Cam Hidden</th>
                         <th><i class="fas fa-hand-paper"></i> Hand Cover</th>
                         <th><i class="fas fa-exclamation-circle"></i> No Blink</th>
                         <th><i class="fas fa-times-circle"></i> Terminated</th>
@@ -323,10 +330,21 @@ tr:hover td{
                     <tr>
                         <td>{{ r[0] }}</td>
                         <td>{{ r[2] }}</td>
+                        <td>
+                            {% set total_v = (r[5]|int) + (r[7]|int) + (r[8]|int) + (r[9]|int) + (r[10]|int) + (r[11]|int) %}
+                            {% if r[6] %}
+                                <span class="penalty-term">Terminated</span>
+                            {% elif total_v > 5 %}
+                                <span class="penalty-high">-3 marks</span>
+                            {% else %}
+                                <span class="penalty-none">None</span>
+                            {% endif %}
+                        </td>
                         <td>{{ r[3] }}</td>
                         <td>{{ r[5] }}</td>
                         <td>{{ r[7] }}</td>
                         <td>{{ r[8] }}</td>
+                        <td>{{ r[9] }}</td>
                         <td>{{ r[10] }}</td>
                         <td>{{ r[11] }}</td>
                         <td>{{ "Yes" if r[6] else "No" }}</td>
