@@ -1,6 +1,11 @@
 ﻿from flask import Flask, render_template, request, redirect, session, url_for, Response, jsonify, flash
 import os
-import psycopg2
+import sqlite3
+import re
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
 import random
 import string
 import base64
@@ -199,6 +204,96 @@ _db_initialized = False
 _db_init_lock = threading.Lock()
 
 
+class DBCompatCursor:
+    def __init__(self, cursor, sqlite_mode: bool):
+        self._cursor = cursor
+        self._sqlite_mode = sqlite_mode
+
+    def _rewrite_query(self, query: str) -> str:
+        if not self._sqlite_mode:
+            return query
+        q = query.replace("%s", "?")
+        q = re.sub(r"\bNOW\(\)", "CURRENT_TIMESTAMP", q, flags=re.IGNORECASE)
+        q = q.replace("::numeric", "")
+        return q
+
+    def execute(self, query, params=None):
+        if params is None:
+            return self._cursor.execute(self._rewrite_query(query))
+        return self._cursor.execute(self._rewrite_query(query), params)
+
+    def executemany(self, query, seq_of_params):
+        return self._cursor.executemany(self._rewrite_query(query), seq_of_params)
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def close(self):
+        return self._cursor.close()
+
+    def __getattr__(self, item):
+        return getattr(self._cursor, item)
+
+
+class DBCompatConnection:
+    def __init__(self, conn, sqlite_mode: bool):
+        self._conn = conn
+        self.sqlite_mode = sqlite_mode
+
+    def cursor(self):
+        return DBCompatCursor(self._conn.cursor(), self.sqlite_mode)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def close(self):
+        return self._conn.close()
+
+    def __getattr__(self, item):
+        return getattr(self._conn, item)
+
+
+def _use_sqlite() -> bool:
+    backend = (os.environ.get("DB_BACKEND") or "").strip().lower()
+    db_url = (os.environ.get("DATABASE_URL") or "").strip().strip('"').strip("'")
+    return backend == "sqlite" or db_url.startswith("sqlite:///") or not db_url
+
+
+def _sqlite_path() -> str:
+    explicit_path = (os.environ.get("SQLITE_PATH") or "").strip()
+    if explicit_path:
+        return explicit_path
+    db_url = (os.environ.get("DATABASE_URL") or "").strip().strip('"').strip("'")
+    if db_url.startswith("sqlite:///"):
+        return db_url[len("sqlite:///"):]
+    return os.path.join(os.getcwd(), "app.db")
+
+
+def _column_exists(cur, table_name: str, column_name: str, sqlite_mode: bool) -> bool:
+    if sqlite_mode:
+        cur.execute(f"PRAGMA table_info({table_name})")
+        cols = cur.fetchall()
+        return any(c[1] == column_name for c in cols)
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = %s AND column_name = %s
+        """,
+        (table_name, column_name),
+    )
+    return cur.fetchone() is not None
+
+
+def _add_column_if_missing(cur, table_name: str, column_name: str, column_def: str, sqlite_mode: bool):
+    if _column_exists(cur, table_name, column_name, sqlite_mode):
+        return
+    cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+
+
 def _normalize_database_url(db_url: str) -> str:
     if db_url.startswith("postgres://"):
         db_url = "postgresql://" + db_url[len("postgres://"):]
@@ -211,18 +306,32 @@ def _normalize_database_url(db_url: str) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 def get_db_connection():
+    if _use_sqlite():
+        db_path = _sqlite_path()
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        return DBCompatConnection(conn, True)
+
     db_url = (os.environ.get("DATABASE_URL") or "").strip().strip('"').strip("'")
     if not db_url:
         raise RuntimeError("DATABASE_URL environment variable is not set")
-    return psycopg2.connect(_normalize_database_url(db_url))
+    if psycopg2 is None:
+        raise RuntimeError("psycopg2 is not installed but PostgreSQL is configured")
+    return DBCompatConnection(psycopg2.connect(_normalize_database_url(db_url)), False)
 
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
+    sqlite_mode = getattr(conn, "sqlite_mode", False)
+    id_col = "INTEGER PRIMARY KEY AUTOINCREMENT" if sqlite_mode else "SERIAL PRIMARY KEY"
+    ts_col = "TEXT" if sqlite_mode else "TIMESTAMPTZ"
+
     # Camera events table for timestamped logs
-    cur.execute("""
+    cur.execute(f"""
     CREATE TABLE IF NOT EXISTS camera_events (
-        id SERIAL PRIMARY KEY,
+        id {id_col},
         username TEXT,
         event_type TEXT,
         event_time TEXT,
@@ -230,9 +339,9 @@ def init_db():
     )
     """)
 
-    cur.execute("""
+    cur.execute(f"""
     CREATE TABLE IF NOT EXISTS users(
-        id SERIAL PRIMARY KEY,
+        id {id_col},
         name TEXT,
         email TEXT,
         username TEXT,
@@ -240,20 +349,20 @@ def init_db():
     )
     """)
 
-    cur.execute("""
+    cur.execute(f"""
     CREATE TABLE IF NOT EXISTS subjects (
-        id SERIAL PRIMARY KEY,
+        id {id_col},
         name TEXT,
         enabled BOOLEAN DEFAULT TRUE
     )
     """)
 
     # Backward compatible schema updates
-    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE")
+    _add_column_if_missing(cur, "subjects", "enabled", "BOOLEAN DEFAULT TRUE", sqlite_mode)
 
-    cur.execute("""
+    cur.execute(f"""
     CREATE TABLE IF NOT EXISTS questions (
-        id SERIAL PRIMARY KEY,
+        id {id_col},
         subject_id INTEGER,
         question TEXT,
         opt1 TEXT,
@@ -264,13 +373,13 @@ def init_db():
     )
     """)
 
-    cur.execute("""
+    cur.execute(f"""
     CREATE TABLE IF NOT EXISTS results (
-        id SERIAL PRIMARY KEY,
+        id {id_col},
         username TEXT,
         subject TEXT,
         score INTEGER,
-        date TIMESTAMPTZ,
+        date {ts_col},
         cheating_count INTEGER DEFAULT 0,
         terminated BOOLEAN DEFAULT FALSE,
         looking_away_count INTEGER DEFAULT 0,
@@ -281,38 +390,38 @@ def init_db():
     )
     """)
 
-    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS camera_hidden_count INTEGER DEFAULT 0")
-    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS hand_cover_count INTEGER DEFAULT 0")
-    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS no_blink_count INTEGER DEFAULT 0")
-    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS head_movement_count INTEGER DEFAULT 0")
-    cur.execute("ALTER TABLE results ADD COLUMN IF NOT EXISTS eye_tracker_count INTEGER DEFAULT 0")
+    _add_column_if_missing(cur, "results", "camera_hidden_count", "INTEGER DEFAULT 0", sqlite_mode)
+    _add_column_if_missing(cur, "results", "hand_cover_count", "INTEGER DEFAULT 0", sqlite_mode)
+    _add_column_if_missing(cur, "results", "no_blink_count", "INTEGER DEFAULT 0", sqlite_mode)
+    _add_column_if_missing(cur, "results", "head_movement_count", "INTEGER DEFAULT 0", sqlite_mode)
+    _add_column_if_missing(cur, "results", "eye_tracker_count", "INTEGER DEFAULT 0", sqlite_mode)
 
     # Exam scheduling & password columns
-    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS exam_password TEXT DEFAULT NULL")
-    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ DEFAULT NULL")
-    cur.execute("ALTER TABLE subjects ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ DEFAULT NULL")
+    _add_column_if_missing(cur, "subjects", "exam_password", "TEXT DEFAULT NULL", sqlite_mode)
+    _add_column_if_missing(cur, "subjects", "start_time", f"{ts_col} DEFAULT NULL", sqlite_mode)
+    _add_column_if_missing(cur, "subjects", "end_time", f"{ts_col} DEFAULT NULL", sqlite_mode)
 
-    cur.execute("""
+    cur.execute(f"""
     CREATE TABLE IF NOT EXISTS materials (
-        id SERIAL PRIMARY KEY,
+        id {id_col},
         title TEXT NOT NULL,
         description TEXT,
         filename TEXT NOT NULL,
         filepath TEXT NOT NULL,
         subject_id INTEGER,
-        upload_date TIMESTAMPTZ,
+        upload_date {ts_col},
         enabled BOOLEAN DEFAULT TRUE
     )
     """)
 
-    cur.execute("""
+    cur.execute(f"""
     CREATE TABLE IF NOT EXISTS coding_results (
-        id SERIAL PRIMARY KEY,
+        id {id_col},
         username TEXT,
         language TEXT,
         code TEXT,
         output TEXT,
-        submitted_at TIMESTAMPTZ,
+        submitted_at {ts_col},
         looking_away_count INTEGER DEFAULT 0,
         tab_switch_count INTEGER DEFAULT 0,
         camera_hidden_count INTEGER DEFAULT 0,
@@ -1885,8 +1994,8 @@ def analytics_data():
     # Pass/Fail per subject
     cur.execute("""
         SELECT subject,
-            COUNT(*) FILTER (WHERE score > 0 AND NOT terminated) as pass_count,
-            COUNT(*) FILTER (WHERE score = 0 OR terminated) as fail_count
+            SUM(CASE WHEN score > 0 AND NOT terminated THEN 1 ELSE 0 END) as pass_count,
+            SUM(CASE WHEN score = 0 OR terminated THEN 1 ELSE 0 END) as fail_count
         FROM results GROUP BY subject ORDER BY subject
     """)
     pf_rows = cur.fetchall()
@@ -1897,7 +2006,7 @@ def analytics_data():
     }
     # Average score per subject
     cur.execute("""
-        SELECT subject, ROUND(AVG(score)::numeric, 2) FROM results GROUP BY subject ORDER BY subject
+        SELECT subject, ROUND(AVG(score), 2) FROM results GROUP BY subject ORDER BY subject
     """)
     avg_rows = cur.fetchall()
     avg_scores = {
@@ -1905,13 +2014,21 @@ def analytics_data():
         "scores": [float(r[1]) for r in avg_rows]
     }
     # Exam submissions last 14 days
+    since_dt = datetime.now() - timedelta(days=14)
     cur.execute("""
-        SELECT TO_CHAR(DATE(date),'Mon DD') as day, COUNT(*)
-        FROM results WHERE date >= NOW() - INTERVAL '14 days'
-        GROUP BY DATE(date), day ORDER BY DATE(date)
-    """)
+        SELECT DATE(date) as day_key, COUNT(*)
+        FROM results WHERE date >= %s
+        GROUP BY DATE(date) ORDER BY DATE(date)
+    """, (since_dt,))
     tl = cur.fetchall()
-    timeline = {"days": [r[0] for r in tl], "counts": [int(r[1]) for r in tl]}
+    timeline_days = []
+    for r in tl:
+        day_key = r[0]
+        try:
+            timeline_days.append(datetime.strptime(str(day_key), "%Y-%m-%d").strftime("%b %d"))
+        except Exception:
+            timeline_days.append(str(day_key))
+    timeline = {"days": timeline_days, "counts": [int(r[1]) for r in tl]}
     conn.close()
     return jsonify({"violations": violations, "pass_fail": pass_fail, "avg_scores": avg_scores, "timeline": timeline})
 
