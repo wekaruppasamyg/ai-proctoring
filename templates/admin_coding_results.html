@@ -259,7 +259,7 @@ td:last-child{white-space:nowrap;}
                     <td>
                         <div class="output-preview">{{ r[4][:100] if r[4] else '(no output)' }}</div>
                     </td>
-                    <td style="font-size:12px;color:var(--muted);">{{ r[5].strftime('%Y-%m-%d %H:%M') if r[5] else '—' }}</td>
+                    <td style="font-size:12px;color:var(--muted);">{{ r[5] if r[5] else '—' }}</td>
                     <td>
                         <div class="violation-cell">
                             <div class="v-row {% if r[6] and r[6] > 0 %}v-has-val{% endif %}"><span>Look Away</span><span>{{ r[6] or 0 }}</span></div>

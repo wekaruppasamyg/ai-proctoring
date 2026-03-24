@@ -1838,8 +1838,21 @@ def admin_coding_results():
         FROM coding_results
         ORDER BY submitted_at DESC
     """)
-    results = cur.fetchall()
+    raw_results = cur.fetchall()
     conn.close()
+
+    results = []
+    for row in raw_results:
+        row = list(row)
+        submitted_at = row[5]
+        if submitted_at is None:
+            row[5] = "-"
+        elif hasattr(submitted_at, "strftime"):
+            row[5] = submitted_at.strftime("%Y-%m-%d %H:%M")
+        else:
+            # SQLite commonly returns TEXT timestamps; normalize for display.
+            row[5] = str(submitted_at).replace("T", " ")[:16]
+        results.append(row)
 
     return render_template("admin_coding_results.html", results=results)
 
