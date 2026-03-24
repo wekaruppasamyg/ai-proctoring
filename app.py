@@ -211,7 +211,7 @@ def _normalize_database_url(db_url: str) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 def get_db_connection():
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = (os.environ.get("DATABASE_URL") or "").strip().strip('"').strip("'")
     if not db_url:
         raise RuntimeError("DATABASE_URL environment variable is not set")
     return psycopg2.connect(_normalize_database_url(db_url))
@@ -339,7 +339,14 @@ def ensure_db_initialized():
 
 @app.before_request
 def _ensure_db_initialized_before_request():
-    ensure_db_initialized()
+    # Allow landing pages even when DB is temporarily unavailable.
+    if request.endpoint in {"home", "ai_login", "static"}:
+        return
+    try:
+        ensure_db_initialized()
+    except Exception as exc:
+        app.logger.exception("Database initialization failed: %s", exc)
+        return "Database unavailable. Verify DATABASE_URL, password encoding, and SSL settings.", 503
 
 # ================= HELPERS =================
 def generate_username(name):
